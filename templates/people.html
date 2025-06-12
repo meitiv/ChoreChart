@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+<head>
+  <title>Maitri People</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h1>People</h1>
+  <table>
+    <tr>
+      <th>First Name</th>
+      <th>Last Name</th>
+      <th>Parent</th>
+      <th>Load (0-1)</th>
+    </tr>
+    {% for person in people.itertuples() %}
+    <tr>
+      <td>{{person.first_name}}</td>
+      <td>{{person.last_name}}</td>
+      <td>{{"Yes" if person.parent else "No"}}</td>
+      <form method="POST" action="{{ url_for('update_person_load') }}">
+	<td>
+	  <input type="hidden" name="id" value="{{ person.id }}"></input> 
+	  <input type="text" name="frac" size="4" value="{{ person.load_fraction }}"></input>
+	</td>
+	<td>
+	  <button type="sumbit">Update</button>
+	</td>
+      </form>
+      <form method="POST" action="{{ url_for('delete_person') }}">
+	<td>
+	  <input type="hidden" name="id" value="{{ person.id }}"></input> 
+	  <button type="sumbit">Delete</button>
+	</td>
+      </form>
+      <form method="GET" action="{{ url_for('prefs', person_id = person.id) }}">
+	<td>
+	  <button type="sumbit">Edit Chore Preferences</button>
+	</td>
+      </form>
+    </tr>
+    {% endfor %}
+  </table>
+  
+  <h3>Add a new person</h3>
+  <form method="POST" action="{{ url_for('add_person') }}">
+    <table>
+      <tr>
+	<td><label for="first_name">First Name:</label></td>
+	<td><input type="text" id="first_name" name="first_name"></input></td>
+      </tr>
+      <tr>
+	<td><label for="last_name">Last Name:</label></td>
+	<td><input type="text" id="last_name" name="last_name"></input></td>
+      </tr>
+      <tr>
+	<td><label for="frac">Load (0-1):</label></td>
+	<td><input type="text" id="frac" name="frac"></input></td>
+      </tr>
+      <tr>
+	<td><label for="parent">Parent:</label></td>
+	<td><input type="checkbox" id="parent" name="parent"></input></td>
+      <tr>
+	<td colspan="2" class="center-text">
+	  <input type="submit" value="Add Person">
+	</td>
+      </tr>
+    </table>
+  </form>
+</body>
+</html>

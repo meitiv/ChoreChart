@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <title>Manage Chore Preferences</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h2><a href="{{ url_for('people') }}">Back to managing people</a></h2>
+  <h1>Manage Chore Preferences for {{person.first_name}}
+    {{person.last_name}}</h1>
+  <h3>Preferences: <br> 0: never want to do this chore <br> 5: love to do this chore</h3>
+  <table>
+    <tr>
+      <th>Chore</th>
+      <th>Preference (0-5)</th>
+    </tr>
+    <form method="POST" action="{{ url_for('prefs', person_id = person.id) }}">
+      {% for pref in prefs.itertuples() %}
+      <tr>
+	<td>{{pref.task}}</td>
+	<td><input type="number" size="2"
+		   value="{{ pref.preference }}"
+		   name="{{ pref.id }}" step="1" min="0" max="5"></input></td>
+      </tr>
+      {% endfor %}
+      <tr>
+	<td colspan="2" class="center-text">
+	  <input type="submit" value="Update Chore Preferences for {{person.first_name}}">
+	</td>
+      </tr>
+    </form>
+  </table>
+</body>
+</html>

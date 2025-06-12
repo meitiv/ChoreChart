@@ -1,0 +1,191 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Maitri Chores</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <h2><a href="{{ url_for('landing_page') }}">Homepage</a></h2>
+    <h2><a href="{{ url_for('people') }}">Manage People</a></h2>
+		 
+    <h2>Daily chores</h2>
+    <table>
+      <tr>
+	<th>Chore Name</th>
+	<th>Description</th>
+	<th>Duration (hours)</th>
+      </tr>
+      {% for chore in daily_chores.itertuples() %}
+      <tr>
+	<td>{{chore.task}}</td>
+	<td>{{chore.description.replace('\n', '<br>') | safe}}</td>
+	<td>{{'%.2f' % chore.duration_hours}}</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <h2>Weekly chores</h2>
+    <table>
+      <tr>
+	<th>Chore Name</th>
+	<th>Description</th>
+	<th>Duration (hours)</th>
+      </tr>
+      {% for chore in weekly_chores.itertuples() %}
+      <tr>
+	<td>{{chore.task}}</td>
+	<td>{{chore.description.replace('\n', '<br>') | safe}}</td>
+	<td>{{'%.2f' % chore.duration_hours}}</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+
+    <h2>Occational chores</h2>
+    <table>
+      <tr>
+	<th>Chore Name</th>
+	<th>Description</th>
+	<th>Duration (hours)</th>
+	<th>Frequency (weeks)</th>
+	<th>Date Last Performed</th>
+      </tr>
+      {% for chore in occasional_chores.itertuples() %}
+      <tr>
+	<td>{{chore.task}}</td>
+	<td>{{chore.description.replace('\n', '<br>') | safe}}</td>
+	<td>{{'%.2f' % chore.duration_hours}}</td>
+	<td>{{chore.frequency_weeks}}</td>
+	<td>{{chore.date_last_performed.strftime('%m/%d/%Y')}}</td>
+	<td>
+	  <form method="POST" action="{{ url_for('delete_occasional_task') }}">
+	    <input type="hidden" name="id" value="{{ chore.id }}"></input> 
+	    <button type="sumbit">Delete</button>
+	  </form>
+	</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <h3>Add a new occasional chore</h3>
+    <form method="POST" action="{{ url_for('add_occasional_task') }}">
+      <table>
+	<tr>
+	  <td><label for="name">Chore Name:</label></td>
+	  <td><input type="text", id="name" name="name" size="50"></input></td>
+	</tr>
+	<tr>
+	  <td><label for="description">Description:</label></td>
+	  <td><textarea id="description" name="description" rows="4" cols="51"></textarea></td>
+	</tr>
+	<tr>
+	  <td><label for="duration">Duration (in hours)</label></td>
+	  <td><input type="number" step="0.05" min="0" value="0.25" id="duration" name="duration" size="4"></input></td>
+	</tr>
+	<tr>
+	  <td><label for="freq">Frequency (in weeks)</label></td>
+	  <td><input type="number" step="1" min="2" value="2" id="freq" name="frequency" size="4"></input></td>
+	</tr>
+	<tr>
+	  <td colspan="4" class="center-text">
+	    <input type="submit" value="Add Occasional Chore">
+	  </td>
+	</tr>
+      </table>
+    </form>
+
+    <h2>Seasonal chores</h2>
+    <table>
+      <tr>
+	<th>Chore Name</th>
+	<th>Description</th>
+	<th>Duration (hours)</th>
+	<th>Start Date</th>
+	<th>End Date</th>
+	<th>Frequency (days)</th>
+	<th>Date Last Performed</th>
+      </tr>
+      {% for chore in seasonal_chores.itertuples() %}
+      <tr>
+	<td>{{chore.task}}</td>
+	<td>{{chore.description.replace('\n', '<br>') | safe}}</td>
+	<td>{{'%.2f' % chore.duration_hours}}</td>
+	<td>{{chore.start_date}}</td>
+	<td>{{chore.end_date}}</td>
+	<td>{{chore.frequency_days}}</td>
+	<td>{{chore.date_last_performed.strftime('%m/%d/%Y')}}</td>
+	<td>
+	  <form method="POST" action="{{ url_for('delete_seasonal_task') }}">
+	    <input type="hidden" name="id" value="{{ chore.id }}"></input> 
+	    <button type="sumbit">Delete</button>
+	  </form>
+	</td>
+      </tr>
+      {% endfor %}
+    </table>
+    <h3>Add a new seasonal chore</h3>
+    <form method="POST" action="{{ url_for('add_seasonal_task') }}">
+      <table>
+	<tr>
+	  <td><label for="name">Chore Name:</label></td>
+	  <td><input type="text", id="name" name="name" size="50"></input></td>
+	</tr>
+	<tr>
+	  <td><label for="description">Description:</label></td>
+	  <td><textarea id="description" name="description" rows="4" cols="51"></textarea></td>
+	</tr>
+	<tr>
+	  <td><label for="duration">Duration (in hours)</label></td>
+	  <td><input type="number" step="0.05" min="0" value="0.25" id="duration" name="duration" size="4"></input></td>
+	</tr>
+	<tr>
+	  <td><label for="freq">Frequency (in weeks)</label></td>
+	  <td><input type="number" step="1" min="2" value="2" id="freq" name="frequency" size="4"></input></td>
+	</tr>
+	<tr>
+	  <td><label for="start">Season Start (month)</label></td>
+	  <td>
+	    <select id="start" name="season_start">
+	      <option value="01">January</option>
+	      <option value="02">February</option>
+	      <option value="03">March</option>
+	      <option value="04">April</option>
+	      <option value="05">May</option>
+	      <option value="06">June</option>
+	      <option value="07">July</option>
+	      <option value="08">August</option>
+	      <option value="09">September</option>
+	      <option value="10">October</option>
+	      <option value="11">November</option>
+	      <option value="12">December</option>
+	    </select>
+	  </td>
+	</tr>
+	<tr>
+	  <td><label for="end">Season End (month)</label></td>
+	  <td>
+	    <select id="end" name="season_end">
+	      <option value="01">January</option>
+	      <option value="02">February</option>
+	      <option value="03">March</option>
+	      <option value="04">April</option>
+	      <option value="05">May</option>
+	      <option value="06">June</option>
+	      <option value="07">July</option>
+	      <option value="08">August</option>
+	      <option value="09">September</option>
+	      <option value="10">October</option>
+	      <option value="11">November</option>
+	      <option value="12">December</option>
+	    </select>
+	  </td>
+	</tr>
+	<tr>
+	  <td colspan="4" class="center-text">
+	    <input type="submit" value="Add Seasonal Chore">
+	  </td>
+	</tr>
+      </table>
+    </form>
+  </body>
+</html>
