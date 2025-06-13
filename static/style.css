@@ -13,3 +13,6 @@ th.frac, td.frac {
 input[type='number']{
     width: 50px;
 }
+.fixed-width {
+    font-family: Courier;
+}

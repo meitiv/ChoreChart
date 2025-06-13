@@ -5,7 +5,9 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  <h1>People</h1>
+  <h2><a href="/">Homepage</a></h2>
+  <h2><a href="/tasks">Chores</a></h2>
+  <h2>Maitri Folk</h2>
   <table>
     <tr>
       <th>First Name</th>
@@ -17,11 +19,13 @@
     <tr>
       <td>{{person.first_name}}</td>
       <td>{{person.last_name}}</td>
-      <td>{{"Yes" if person.parent else "No"}}</td>
-      <form method="POST" action="{{ url_for('update_person_load') }}">
+      <form method="POST" action="{{ url_for('update_person') }}">
+	<input type="hidden" name="id" value="{{ person.id }}"></input> 
 	<td>
-	  <input type="hidden" name="id" value="{{ person.id }}"></input> 
-	  <input type="text" name="frac" size="4" value="{{ person.load_fraction }}"></input>
+	  <input type="checkbox" name="parent" {{"checked" if person.parent else ""}}/>
+	</td>
+	<td>
+	  <input type="text" name="frac" size="4" value="{{ person.load_fraction }}"/>
 	</td>
 	<td>
 	  <button type="sumbit">Update</button>
@@ -36,6 +40,11 @@
       <form method="GET" action="{{ url_for('prefs', person_id = person.id) }}">
 	<td>
 	  <button type="sumbit">Edit Chore Preferences</button>
+	</td>
+      </form>
+      <form method="GET" action="{{ url_for('requests', person_id = person.id) }}">
+	<td>
+	  <button type="sumbit">Edit Weekly Chore Requests</button>
 	</td>
       </form>
     </tr>

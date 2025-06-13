@@ -6,9 +6,13 @@ from flask import url_for
 import sqlite3
 import pandas as pd
 import numpy as np
+from datetime import date, timedelta
 
 app = Flask(__name__)
 db = "maitri_chores.db"
+
+def int_to_bits(number: int):
+    return list(np.binary_repr(number, 7))
 
 @app.route("/")
 def landing_page():
@@ -23,18 +27,22 @@ def people():
         )
     return render_template("people.html", people = people)
 
-@app.route("/update_person_load", methods=["POST"])
-def update_person_load():
-    person_id = int(request.form["id"])
+@app.route("/update_person", methods=["POST"])
+def update_person():
+    person_id = request.form["id"]
     load_fraction = float(request.form["frac"])
     if load_fraction < 0: load_fraction = 0
     if load_fraction > 1: load_fraction = 1
+    parent = 1 if "parent" in request.form else 0
     with sqlite3.connect(db) as con:
         cursor = con.cursor()
         cursor.execute(
             f"""UPDATE people SET load_fraction = {load_fraction}
             WHERE id = {person_id}"""
         )
+        cursor.execute(
+            f"UPDATE people SET parent = {parent} WHERE id = {person_id}"
+        )        
         con.commit()            
 
     return redirect(url_for("people"))
@@ -46,6 +54,7 @@ def add_person():
     last_name = request.form["last_name"]
     frac = float(request.form["frac"])
     parent = 1 if "parent" in request.form else 0
+    deficit = 0
     with sqlite3.connect(db) as con:
         cursor = con.cursor()
         cursor.execute("SELECT MAX(id) FROM people")
@@ -53,7 +62,7 @@ def add_person():
         cursor.execute(
             f"""INSERT INTO people
             VALUES ('{person_id}', '{first_name}', '{last_name}',
-            {frac}, {parent})"""
+            {frac}, {parent}, {deficit})"""
         )
         con.commit()
         # create default chore preferences for this person
@@ -86,6 +95,9 @@ def delete_person():
         )
         cursor.execute(
             f"DELETE FROM preferences WHERE person_id = {person_id}"
+        )
+        cursor.execute(
+            f"DELETE FROM requests WHERE person_id = {person_id}"
         )
         con.commit()
     return redirect(url_for("people"))
@@ -235,14 +247,70 @@ def prefs(person_id):
                 if old_pref_value != new_pref_value:
                     prefs.loc[idx,'preference'] = new_pref_value
                     cur.execute(
-                        f"""UPDATE preferences
-                        SET preference = {new_pref_value}
+                        f"""UPDATE preferences SET
+                        preference = {new_pref_value}
                         WHERE id = {pref_id}"""
                     )
             con.commit()
         
     return render_template("prefs.html", person_id = person_id,
                            person = person, prefs = prefs)
+
+@app.route("/requests/<int:person_id>", methods=["GET", "POST"])
+def requests(person_id):
+    with sqlite3.connect(db) as con:
+        # get people and chore requests
+        person = pd.read_sql(
+            con = con,
+            sql = f"SELECT * FROM people WHERE id = {person_id}"
+        ).squeeze()
+        # get the date of the monday, the following week
+        today = date.today()
+        days_to_add = 7 - today.weekday()
+        date_week_starts = today + timedelta(days = days_to_add)
+        date_week_starts = date_week_starts.strftime('%m/%d/%Y')
+
+        # if method is POST, modify the requests
+        if request.method == "POST":
+            intown = int(''.join(
+                '1' if f"intown_{b}" in request.form else '0'
+                for b in range(7)), 2)
+            am = int(''.join(
+                '1' if f"am_{b}" in request.form else '0'
+                for b in range(7)), 2)
+            pm = int(''.join(
+                '1' if f"pm_{b}" in request.form else '0'
+                for b in range(7)), 2)
+            cook = int(''.join(
+                '1' if f"meal_{b}" in request.form else '0'
+                for b in range(7)), 2)
+            clean = int(''.join(
+                '1' if f"cleanup_{b}" in request.form else '0'
+                for b in range(7)), 2)
+            cur = con.cursor()
+            cur.execute(
+                f"""UPDATE requests SET
+                days_in_town = {intown},
+                dishes_am = {am},
+                dishes_pm = {pm},
+                cook_meal = {cook},
+                meal_cleanup = {clean}
+                WHERE person_id = {person_id}"""
+            )
+            con.commit()
+        # get the requests oroginal or modified
+        requests = pd.read_sql(
+            con = con,
+            sql = f"SELECT * FROM requests WHERE person_id = {person_id}"
+        )
+        # make bit lists from each integer attribute
+        for col in requests.columns:
+            if "id" in col: continue
+            requests[col] = requests[col].apply(int_to_bits)
+        requests = requests.squeeze()
+        return render_template("requests.html", person_id = person_id,
+                               date = date_week_starts, person = person,
+                               requests = requests)
 
 if __name__ == '__main__':
     app.run(debug = True)
