@@ -1,12 +1,12 @@
 <!doctype html>
 <html>
 <head>
-  <title>Maitri Chores Administration</title>
+  <title>Maitri Chore Chart</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
 
-  <h1>Maitri Chores</h1>
+  <h1>Maitri Chore Chart</h1>
 
   <h2>Admin tasks</h2>
   <ul>
@@ -16,8 +16,8 @@
 
   <h2>Chore Chart</h2>
   <ul>
-    <li>View and export this week's chore chart</li>
-    <li>Construct the next week's chore chart</li>
+    <li><a href="/assignments">View current and past chore assignments</a></li>
+    <li><a href="/assign-chores">Construct the chore chart for next week</a></li>
   </ul>
 
 </body>

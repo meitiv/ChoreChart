@@ -7,9 +7,10 @@ import sqlite3
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta
+from maitri_db import db
+import assign_chores
 
 app = Flask(__name__)
-db = "maitri_chores.db"
 
 def int_to_bits(number: int):
     return list(np.binary_repr(number, 7))
@@ -272,21 +273,48 @@ def requests(person_id):
 
         # if method is POST, modify the requests
         if request.method == "POST":
-            intown = int(''.join(
-                '1' if f"intown_{b}" in request.form else '0'
-                for b in range(7)), 2)
-            am = int(''.join(
-                '1' if f"am_{b}" in request.form else '0'
-                for b in range(7)), 2)
-            pm = int(''.join(
-                '1' if f"pm_{b}" in request.form else '0'
-                for b in range(7)), 2)
-            cook = int(''.join(
-                '1' if f"meal_{b}" in request.form else '0'
-                for b in range(7)), 2)
-            clean = int(''.join(
-                '1' if f"cleanup_{b}" in request.form else '0'
-                for b in range(7)), 2)
+            if "reset_intown" in request.form:
+                intown = 0
+            else:
+                intown = int(''.join(
+                    '1' if f"intown_{b}" in request.form else '0'
+                    for b in range(7)), 2)
+            if "reset_am" in request.form:
+                am = 0
+            else:
+                am = int(''.join(
+                    '1' if f"am_{b}" in request.form else '0'
+                    for b in range(7)), 2)
+            if "reset_pm" in request.form:
+                pm = 0
+            else:
+                pm = int(''.join(
+                    '1' if f"pm_{b}" in request.form else '0'
+                    for b in range(7)), 2)
+            if "reset_cook" in request.form:
+                cook = 0
+            else:
+                cook = int(''.join(
+                    '1' if f"meal_{b}" in request.form else '0'
+                    for b in range(7)), 2)
+            if "reset_sous" in request.form:
+                sous = 0
+            else:
+                sous = int(''.join(
+                    '1' if f"sous_{b}" in request.form else '0'
+                    for b in range(7)), 2)
+            if "reset_clean" in request.form:
+                clean = 0
+            else:
+                clean = int(''.join(
+                    '1' if f"cleanup_{b}" in request.form else '0'
+                    for b in range(7)), 2)
+            if "reset_sweep" in request.form:
+                sweep = 0
+            else:
+                sweep = int(''.join(
+                    '1' if f"sweep_{b}" in request.form else '0'
+                    for b in range(7)), 2)
             cur = con.cursor()
             cur.execute(
                 f"""UPDATE requests SET
@@ -294,15 +322,18 @@ def requests(person_id):
                 dishes_am = {am},
                 dishes_pm = {pm},
                 cook_meal = {cook},
-                meal_cleanup = {clean}
+                sous_chef = {sous},
+                meal_cleanup = {clean},
+                night_sweep = {sweep}
                 WHERE person_id = {person_id}"""
             )
             con.commit()
-        # get the requests oroginal or modified
+        # get the requests original or modified
         requests = pd.read_sql(
             con = con,
             sql = f"SELECT * FROM requests WHERE person_id = {person_id}"
         )
+
         # make bit lists from each integer attribute
         for col in requests.columns:
             if "id" in col: continue
@@ -311,6 +342,59 @@ def requests(person_id):
         return render_template("requests.html", person_id = person_id,
                                date = date_week_starts, person = person,
                                requests = requests)
+
+@app.route("/assignments")
+def current_assignment():
+    with sqlite3.connect(db) as con:
+        mondays = pd.read_sql(
+            con=con, sql="SELECT DISTINCT week_start_date FROM assignments"
+        ).week_start_date.values
+    return render_template("assignments.html", mondays=mondays)
+
+@app.route("/assign-chores")
+def make_chore_chart():
+    monday = assign_chores.assign_chores()
+    return redirect(url_for("display_assignment", monday = monday))
+
+@app.route("/assignment/<monday>")
+def display_assignment(monday):
+    with sqlite3.connect(db) as con:
+        people = pd.read_sql(con=con, sql="SELECT * FROM people").set_index('id')
+        daily = pd.read_sql(con=con, sql="SELECT * FROM daily_tasks").set_index('id')
+        weekly = pd.read_sql(con=con, sql="SELECT * FROM weekly_tasks").set_index('id')
+        seasonal = pd.read_sql(con=con, sql="SELECT * FROM seasonal_tasks").set_index('id')
+        occasional = pd.read_sql(con=con, sql="SELECT * FROM occasional_tasks").set_index('id')
+        assign = pd.read_sql(con=con, sql="SELECT * FROM assignments").query(f'week_start_date == "{monday}"')
+        assign_timed = pd.read_sql(con=con, sql="SELECT * FROM assignments_timed").query(f'week_start_date == "{monday}"')
+        hours = pd.read_sql(con=con, sql="SELECT * FROM hours").query(f'week_start_date == "{monday}"').set_index('person_id')
+    people['hours'] = hours.target_hours - hours.leftover_hours
+    # construct the dict of assignments with names as keys
+    people_ids = pd.concat((assign.person_id, assign_timed.person_id)).unique()
+    chores = {}
+    hours = {} # total number of hours
+    for person_id in people_ids:
+        person_name = ' '.join((
+            people.loc[person_id, 'first_name'], people.loc[person_id, 'last_name']
+        ))
+        hours[person_name] = people.loc[person_id, 'hours']
+        rows = []
+        for _, chore in assign_timed.query(f'person_id == {person_id}').sort_values('weekday').iterrows():
+            task = daily.loc[chore.task_id]
+            ts = pd.Timestamp(chore.week_start_date) + pd.Timedelta(days = chore.weekday)
+            rows.append({
+                'task': task.task,
+                'duration_hours': task.duration_hours,
+                'weekday': ts.strftime("%A")
+            })
+        for _, chore in assign.query(f'person_id == {person_id}').iterrows():
+            task = eval(f'{chore.task_type}.loc[{chore.task_id}]')
+            rows.append({
+                'task': task.task,
+                'duration_hours': task.duration_hours,
+                'weekday': ''
+            })
+        chores[person_name] = pd.DataFrame(rows)
+    return render_template("assignment.html", monday=monday, chores=chores, hours=hours)
 
 if __name__ == '__main__':
     app.run(debug = True)

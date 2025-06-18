@@ -7,4 +7,4 @@ tables = [
     'preferences',
     'requests'    
 ]
-db = 'maitri_chores.db'
+db = 'data/maitri_chores.db'

@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+  <title>Maitri Chore Assignments</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h2><a href="/">Homepage</a></h2>
+  <h2><a href="/people">People</a></h2>
+  <h2><a href="/tasks">Chores</a></h2>
+  <h2>Chore Assignments for Week Beginnging on {{monday}}</h2>
+  {% for name, person_chores in chores.items() %}
+  <h3>Chores for {{name}}</h3>
+  <table>
+    <tr>
+      <th>Chore</th>
+      <th>Hours</th>
+      <th>Day</th>
+    </tr>
+    {% for chore in person_chores.itertuples() %}
+    <tr>
+      <td>{{chore.task}}</td>
+      <td>{{chore.duration_hours}}</td>
+      <td>{{chore.weekday}}</td>
+    </tr>
+    {% endfor %}
+    <tr>
+      <td>Total hours:</td>
+      <td>{{hours[name]}}</td>
+    </tr>
+  </table>
+  {% endfor %}
+</body>
+</html>

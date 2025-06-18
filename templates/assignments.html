@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+<head>
+  <title>Current and Past Chore Assignments</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h2><a href="/">Homepage</a></h2>
+  <h2>Current and Past Chore Assignments</h2>
+  <ul>
+  {% for monday in mondays %}
+  <li><a href="{{ url_for('display_assignment', monday=monday) }}">Week starting on {{monday}}</a></li>
+  {% endfor %}
+  </ul>
+</body>
+</html>
