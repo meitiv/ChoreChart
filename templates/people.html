@@ -37,11 +37,6 @@
 	  <button type="sumbit">Delete</button>
 	</td>
       </form>
-      <form method="GET" action="{{ url_for('prefs', person_id = person.id) }}">
-	<td>
-	  <button type="sumbit">Edit Chore Preferences</button>
-	</td>
-      </form>
       <form method="GET" action="{{ url_for('requests', person_id = person.id) }}">
 	<td>
 	  <button type="sumbit">Edit Weekly Chore Requests</button>

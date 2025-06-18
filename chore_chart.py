@@ -224,38 +224,23 @@ def delete_seasonal_task():
         con.commit()
     return redirect(url_for("tasks"))
 
-@app.route("/prefs/<int:person_id>", methods=["GET", "POST"])
-def prefs(person_id):
+@app.route("/prefs", methods=["GET", "POST"])
+def prefs():
     with sqlite3.connect(db) as con:
-        person = pd.read_sql(
-            con = con,
-            sql = f"SELECT * FROM people WHERE id = {person_id}"
-        ).squeeze()
-        # get the original preferences
-        prefs = pd.read_sql(
-            con = con,
-            sql = f"SELECT * FROM preferences WHERE person_id = {person_id}"
-        )
         # if the request is post, modify the preferences
         cur = con.cursor()
         if request.method == 'POST':
-            for pref_id, new_pref_value in request.form.items():
-                # only if the old_pref_value is different, change it
-                row = prefs.query(f'id == {pref_id}').squeeze()
-                old_pref_value = int(row.preference)
-                new_pref_value = int(new_pref_value)
-                idx = row.name
-                if old_pref_value != new_pref_value:
-                    prefs.loc[idx,'preference'] = new_pref_value
-                    cur.execute(
-                        f"""UPDATE preferences SET
-                        preference = {new_pref_value}
-                        WHERE id = {pref_id}"""
-                    )
+            for pref_id, value in request.form.items():
+                cur.execute(f"UPDATE preferences SET preference = {value} WHERE id = {pref_id}")
             con.commit()
-        
-    return render_template("prefs.html", person_id = person_id,
-                           person = person, prefs = prefs)
+
+        people = pd.read_sql(con=con, sql = f"SELECT * FROM people")
+        people = people.rename(columns = {'id': 'person_id'})
+        prefs = pd.read_sql(con=con, sql = f"SELECT * FROM preferences")
+        prefs = prefs.merge(people[['person_id','first_name']], on = 'person_id')
+        prefs = prefs.sort_values(['task','first_name']).set_index(['task','first_name'])
+
+    return render_template("prefs.html", prefs = prefs)
 
 @app.route("/requests/<int:person_id>", methods=["GET", "POST"])
 def requests(person_id):

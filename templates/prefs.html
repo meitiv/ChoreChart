@@ -7,26 +7,35 @@
 <body>
   <h2><a href="/">Homepage</a></h2>
   <h2><a href="/people">People</a></h2>
-  <h1>Manage Chore Preferences for {{person.first_name}}
-    {{person.last_name}}</h1>
-  <h3>Preference values range from: <br> 0: never want to do this chore <br>to<br> 5: love to do this chore</h3>
+  <h1>Manage Chore Preferences</h1>
+  <h3>Preference values range from: <br>
+    0: never want to do this chore
+    <br>to<br>
+    5: love to do this chore</h3>
   <table>
     <tr>
       <th>Chore</th>
-      <th>Preference (0-5)</th>
+	{% for name in prefs.index.levels[1] %}
+	<th>{{name}}</th>
+	{% endfor %}
     </tr>
-    <form method="POST" action="{{ url_for('prefs', person_id = person.id) }}">
-      {% for pref in prefs.itertuples() %}
+    <form method="POST" action="{{ url_for('prefs') }}">
+      {% for task in prefs.index.levels[0] %}
       <tr>
-	<td>{{pref.task}}</td>
-	<td><input type="number"
-		   value="{{ pref.preference }}"
-		   name="{{ pref.id }}" step="1" min="0" max="5"></input></td>
+	<td>{{task}}</td>
+	{% for name in prefs.index.levels[1] %}	
+	<td>
+	  <input type="number"
+		 value="{{ prefs.loc[(task, name), 'preference'] }}"
+		 name="{{ prefs.loc[(task, name), 'id'] }}"
+		 step="1" min="0" max="5"></input>
+	</td>
+	{% endfor %}
       </tr>
       {% endfor %}
       <tr>
-	<td colspan="2" class="center-text">
-	  <input type="submit" value="Update Chore Preferences for {{person.first_name}}">
+	<td colspan="{{ prefs.index.levels[1].size + 1 }}" class="center-text">
+	  <input type="submit" value="Update Chore Preferences">
 	</td>
       </tr>
     </form>
