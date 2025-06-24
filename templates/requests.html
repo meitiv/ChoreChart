@@ -32,6 +32,7 @@
 	</p></td>
 	<td>
 	  <button type="sumbit" name="reset_intown">Unselect All</button>
+	  <button type="sumbit" name="set_intown">Select All</button>
 	</td>
       </tr>
       <tr>
@@ -54,8 +55,11 @@
 	    <label for="sun_pm">Sun PM</label><input type="checkbox" id="sun_pm" name="pm_6" {{"checked" if requests.dishes_pm[6]=="1" else ""}} >
 	</p></td>
 	<td>
-	  <button type="sumbit" name="reset_am">Unselect AM</button><br>
+	  <button type="sumbit" name="reset_am">Unselect AM</button>
+	  <button type="sumbit" name="set_am">Select AM</button>
+	  <br>
 	  <button type="sumbit" name="reset_pm">Unselect PM</button>
+	  <button type="sumbit" name="set_pm">Select PM</button>
 	</td>
       </tr>
       <tr>
@@ -78,6 +82,7 @@
 	</p></td>
 	<td>
 	  <button type="sumbit" name="reset_cook">Unselect All</button>
+	  <button type="sumbit" name="set_cook">Select All</button>
 	</td>
       </tr>
       <tr>
@@ -100,6 +105,7 @@
 	</p></td>
 	<td>
 	  <button type="sumbit" name="reset_sous">Unselect All</button>
+	  <button type="sumbit" name="set_sous">Select All</button>
 	</td>
       </tr>
       <tr>
@@ -122,6 +128,7 @@
 	</p></td>
 	<td>
 	  <button type="sumbit" name="reset_clean">Unselect All</button>
+	  <button type="sumbit" name="set_clean">Select All</button>
 	</td>
       </tr>
 
@@ -144,6 +151,7 @@
 	</p></td>
 	<td>
 	  <button type="sumbit" name="reset_sweep">Unselect All</button>
+	  <button type="sumbit" name="set_sweep">Select All</button>
 	</td>
       </tr>
       

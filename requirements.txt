@@ -2,4 +2,5 @@ Flask
 gunicorn
 Werkzeug
 pandas
-openpyxl
+pygsheets
+sqlalchemy

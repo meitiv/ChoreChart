@@ -245,88 +245,103 @@ def prefs():
 @app.route("/requests/<int:person_id>", methods=["GET", "POST"])
 def requests(person_id):
     with sqlite3.connect(db) as con:
-        # get people and chore requests
-        person = pd.read_sql(
-            con = con,
-            sql = f"SELECT * FROM people WHERE id = {person_id}"
-        ).squeeze()
         # get the date of the monday, the following week
         today = date.today()
         days_to_add = 7 - today.weekday()
         date_week_starts = today + timedelta(days = days_to_add)
-        date_week_starts = date_week_starts.strftime('%m/%d/%Y')
+
+        # get the person
+        person = pd.read_sql(con=con, sql=f"SELECT * FROM people WHERE id = {person_id}").squeeze()
 
         # if method is POST, modify the requests
         if request.method == "POST":
             if "reset_intown" in request.form:
                 intown = 0
+            elif "set_intown" in request.form:
+                intown = 127
             else:
                 intown = int(''.join(
                     '1' if f"intown_{b}" in request.form else '0'
                     for b in range(7)), 2)
             if "reset_am" in request.form:
                 am = 0
+            elif "set_am" in request.form:
+                am = 127
             else:
                 am = int(''.join(
                     '1' if f"am_{b}" in request.form else '0'
                     for b in range(7)), 2)
             if "reset_pm" in request.form:
                 pm = 0
+            elif "set_pm" in request.form:
+                pm = 127
             else:
                 pm = int(''.join(
                     '1' if f"pm_{b}" in request.form else '0'
                     for b in range(7)), 2)
             if "reset_cook" in request.form:
                 cook = 0
+            elif "set_cook" in request.form:
+                cook = 127
             else:
                 cook = int(''.join(
                     '1' if f"meal_{b}" in request.form else '0'
                     for b in range(7)), 2)
             if "reset_sous" in request.form:
                 sous = 0
+            elif "set_sous" in request.form:
+                sous = 127
             else:
                 sous = int(''.join(
                     '1' if f"sous_{b}" in request.form else '0'
                     for b in range(7)), 2)
             if "reset_clean" in request.form:
                 clean = 0
+            elif "set_clean" in request.form:
+                clean = 127
             else:
                 clean = int(''.join(
                     '1' if f"cleanup_{b}" in request.form else '0'
                     for b in range(7)), 2)
             if "reset_sweep" in request.form:
                 sweep = 0
+            elif "set_sweep" in request.form:
+                sweep = 127
             else:
                 sweep = int(''.join(
                     '1' if f"sweep_{b}" in request.form else '0'
                     for b in range(7)), 2)
             cur = con.cursor()
             cur.execute(
-                f"""UPDATE requests SET
-                days_in_town = {intown},
-                dishes_am = {am},
-                dishes_pm = {pm},
-                cook_meal = {cook},
-                sous_chef = {sous},
-                meal_cleanup = {clean},
-                night_sweep = {sweep}
-                WHERE person_id = {person_id}"""
+                f"""DELETE FROM requests WHERE person_id = {person_id}
+                AND week_start_date = '{date_week_starts}'"""
+            )
+            cur.execute(
+                f"""INSERT INTO requests VALUES (
+                '{date_week_starts}', {person_id}, {intown}, {am}, {pm},
+                {cook}, {sous}, {clean}, {sweep})
+                """
             )
             con.commit()
         # get the requests original or modified
         requests = pd.read_sql(
             con = con,
-            sql = f"SELECT * FROM requests WHERE person_id = {person_id}"
+            sql = f"""SELECT * FROM requests
+            WHERE person_id = {person_id} AND
+            week_start_date = '{date_week_starts}'"""
         )
+        # if requests are empty (either because the person does not
+        # exist, or the date does not exist, add a row with all 0's
+        if requests.empty:
+            requests.loc[0] = [date_week_starts, 0, 0, 0, 0, 0, 0, 0, 0]
 
         # make bit lists from each integer attribute
         for col in requests.columns:
-            if "id" in col: continue
+            if "id" in col or "date" in col: continue
             requests[col] = requests[col].apply(int_to_bits)
         requests = requests.squeeze()
-        return render_template("requests.html", person_id = person_id,
-                               date = date_week_starts, person = person,
-                               requests = requests)
+        return render_template("requests.html", person = person,
+                               date = date_week_starts, requests = requests)
 
 @app.route("/assignments")
 def current_assignment():
@@ -334,7 +349,9 @@ def current_assignment():
         mondays = pd.read_sql(
             con=con, sql="SELECT DISTINCT week_start_date FROM assignments"
         ).week_start_date.values
-    return render_template("assignments.html", mondays=mondays)
+        mondays.sort()
+    return render_template("assignments.html",
+                           mondays=mondays[::-1])
 
 @app.route("/assign-chores")
 def make_chore_chart():
@@ -352,6 +369,7 @@ def display_assignment(monday):
         assign = pd.read_sql(con=con, sql="SELECT * FROM assignments").query(f'week_start_date == "{monday}"')
         assign_timed = pd.read_sql(con=con, sql="SELECT * FROM assignments_timed").query(f'week_start_date == "{monday}"')
         hours = pd.read_sql(con=con, sql="SELECT * FROM hours").query(f'week_start_date == "{monday}"').set_index('person_id')
+
     people['hours'] = hours.target_hours - hours.leftover_hours
     # construct the dict of assignments with names as keys
     people_ids = pd.concat((assign.person_id, assign_timed.person_id)).unique()

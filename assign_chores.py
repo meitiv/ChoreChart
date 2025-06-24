@@ -6,7 +6,9 @@ import numpy as np
 import sqlite3
 from typing import List
 import re
+import sys
 from collections import defaultdict
+from datetime import timedelta, datetime
 
 def get_max_gap(days: List[int]) -> int:
     # calculate the largest circular gap between days
@@ -14,6 +16,9 @@ def get_max_gap(days: List[int]) -> int:
     num_days = len(days)
     days.append(days[0] + 7)
     return max(days[i+1] - days[i] for i in range(num_days))
+
+def count_avail_days(request: int) -> int:
+    return np.binary_repr(request, 7).count('1')
 
 def get_weekdays(request: int) -> List[int]:
     # request int is the integer value of the binary representation of
@@ -51,7 +56,7 @@ def append_timed_rows(assign_dict, task_id, monday, rows):
     for person_id, days in assign_dict.items():
         for day in days:
             rows.append({
-                'week_start_date': monday.date(),
+                'week_start_date': monday,
                 'person_id': person_id,
                 'weekday': day,
                 'task_id': task_id
@@ -62,50 +67,85 @@ def append_chore_rows(assign_dict, task_type, monday, rows):
     for person_id, task_ids in assign_dict.items():
         for task_id in task_ids:
             rows.append({
-                'week_start_date': monday.date(),
+                'week_start_date': monday,
                 'person_id': person_id,
                 'task_type': task_type,
                 'task_id': task_id
             })
     return rows
-    
+
+def get_hours_worked(monday, assignments, assignments_timed,
+                     daily, weekly, seasonal, occasional):
+    timed = assignments_timed.query(
+        f'week_start_date == "{monday}"'
+    ).merge(
+        daily[['id', 'duration_hours']],
+        left_on = 'task_id', right_on = 'id'
+    )
+    hours_timed = timed.groupby('person_id').duration_hours.sum()
+    frames = []
+    for task_type in ['daily', 'weekly', 'seasonal', 'occasional']:
+        df = eval(task_type)[['id', 'duration_hours']].copy()
+        df['task_type'] = task_type
+        frames.append(df)
+    chores = assignments.query(
+        f'week_start_date == "{monday}"'
+    ).merge(
+        pd.concat(frames)[['id', 'task_type', 'duration_hours']],
+        left_on = ['task_id', 'task_type'],
+        right_on = ['id', 'task_type']
+    )
+    hours = chores.groupby('person_id').duration_hours.sum()
+    return pd.concat((hours, hours_timed), axis = 1).fillna(0).sum(axis = 1)
+
 def assign_chores():
     # read the data
     with sqlite3.connect(db) as con:
         people = get_table(con, "people").set_index('id')
-        hours = get_table(con, "hours", ["week_start_date"])
         requests = get_table(con, "requests")
         preferences = get_table(con, "preferences")
         daily = get_table(con, "daily_tasks")
         weekly = get_table(con, "weekly_tasks")
-        occasional = get_table(con, "occasional_tasks", ["date_last_performed"])
-        seasonal = get_table(con, "seasonal_tasks", ["date_last_performed"])
-        today = pd.Timestamp.now()
-        monday = today + pd.Timedelta(days = 7 - today.weekday())
-        this_monday = monday - pd.Timedelta(days = 7)
+        occasional = get_table(con, "occasional_tasks")
+        seasonal = get_table(con, "seasonal_tasks")
+        today = datetime.today().date()
+        monday = today + timedelta(days = 7 - today.weekday())
+        this_monday = monday - timedelta(days = 7)
         year = monday.year 
         seasonal['start_date'] = pd.to_datetime(seasonal.start_date + f"/{year}")
         seasonal['end_date'] = pd.to_datetime(seasonal.end_date + f"/{year}")
         seasonal['end_date'] = seasonal.apply(
             lambda row: row.end_date if row.end_date > row.start_date
-            else row.end_date + pd.Timedelta(days = 365),
+            else row.end_date + timedelta(days = 365),
             axis = 1
         )
+        # get last week's hourly deficit
+        deficit = pd.read_sql(
+            con=con,
+            sql=f"""
+            SELECT person_id, leftover_hours FROM hours
+            WHERE week_start_date = '{this_monday}'"""
+        ).set_index('person_id').squeeze()
 
-    # compute the target number of hours for each person
-    intown = get_people_and_days('days_in_town', requests)
-    people['days_in_town'] = intown.num_days
-    people = people.fillna(0)
-    hours = hours.query(f'week_start_date == "{this_monday.date()}"').set_index('person_id')
+    # compute target hours
+    days_in_town = requests.query(
+        f'week_start_date == "{monday}"'
+    ).set_index('person_id').days_in_town.apply(count_avail_days)
     people['chore_hours'] = (
-        target_weekly_hours*people.load_fraction*people.days_in_town/7 +
-        hours.leftover_hours - people.parent*parent_credit_hours
-    )
-    
-    # save the target hours 
-    target_hours_this_week = people.chore_hours.copy()
+        (target_weekly_hours - people.parent*parent_credit_hours)*people.load_fraction*days_in_town/7
+        + deficit
+    ).fillna(0)
 
+    # save target hours
+    hours_this_week = pd.DataFrame(index = people.index)
+    hours_this_week.insert(0, 'week_start_date', monday)
+    hours_this_week['days_in_town'] = days_in_town
+    hours_this_week['target_hours'] = people.chore_hours
+    hours_this_week = hours_this_week.fillna(0)
+    
     # people available to cook the house meal, cleanup, sweep
+    requests = requests.query(f'week_start_date == "{monday}"')
+    intown = get_people_and_days('days_in_town', requests)
     meal = get_people_and_days('cook_meal', requests)
     clean = get_people_and_days('meal_cleanup', requests)
     sweep = get_people_and_days('night_sweep', requests)
@@ -185,7 +225,7 @@ def assign_chores():
                 people.loc[person_id, 'chore_hours'] -= clean_help_task.duration_hours
 
     # assign night sweep to all days that do not have a meal
-    sweep_days = [d for d in range(7) if d not in cook.values()]
+    sweep_days = [d for d in range(7) if d not in clean_days]
     clean_pref = merge_prefs(clean, preferences, "Night Cleanup")
     sweep = defaultdict(list)
     for person_id, row in clean_pref.iterrows():
@@ -274,13 +314,21 @@ def assign_chores():
     assignments_timed = pd.DataFrame(rows)
     
     # add the urgency column to the seasonal task definitions
-    seasonal['urgency'] = (monday - seasonal.date_last_performed).dt.days - seasonal.frequency_days
+    date_last_performed = pd.read_sql(
+        con=con,
+        sql="""SELECT task_id as id, MAX(week_start_date) as date_last_performed
+        FROM assignments WHERE task_type = 'seasonal' GROUP BY task_id"""
+    )
+    seasonal = seasonal.merge(
+        date_last_performed, on = 'id', how = 'left'
+    ).fillna(monday - timedelta(days = 365))
     # remove tasks with negative urgency (they don't have to be done yet)
+    seasonal['urgency'] = (pd.to_datetime(monday) - pd.to_datetime(seasonal.date_last_performed)).dt.days - seasonal.frequency_days
     seasonal = seasonal[seasonal.urgency > 0]
     # seasonal assignments
     seasonal_chores = defaultdict(list)
     for task_id, task in seasonal.sort_values('urgency', ascending = False).iterrows():
-        if monday > task.end_date or monday < task.start_date:
+        if monday > task.end_date.date() or monday < task.start_date.date():
             print('Skipping seasonal', task.task, ': out of season')
             continue
         print('Assigning', task.task)
@@ -297,7 +345,15 @@ def assign_chores():
         people.loc[person_id, 'chore_hours'] -= task.duration_hours
 
     # add the urgency column to the occasional task definitions
-    occasional['urgency'] = (monday - occasional.date_last_performed).dt.days/7 - occasional.frequency_weeks
+    date_last_performed = pd.read_sql(
+        con=con,
+        sql="""SELECT task_id as id, MAX(week_start_date) as date_last_performed
+        FROM assignments WHERE task_type = 'occasional' GROUP BY task_id"""
+    )
+    occasional = occasional.merge(
+        date_last_performed, on = 'id', how = 'left'
+    ).fillna(monday - timedelta(days = 365))
+    occasional['urgency'] = (pd.to_datetime(monday) - pd.to_datetime(occasional.date_last_performed)).dt.days/7 - occasional.frequency_weeks
     # remove tasks with negative urgency (they don't have to be done yet)
     occasional = occasional[occasional.urgency > 0]
     # occasional assignments
@@ -325,18 +381,18 @@ def assign_chores():
     # update the database: assignments and people (deficit column)
     with sqlite3.connect(db) as con:
         cur = con.cursor()
-        con.execute(f'DELETE FROM assignments WHERE week_start_date = "{monday.date()}"')
-        con.execute(f'DELETE FROM assignments_timed WHERE week_start_date = "{monday.date()}"')
-        con.execute(f'DELETE FROM hours WHERE week_start_date = "{monday.date()}"')
+        con.execute(f'DELETE FROM assignments WHERE week_start_date = "{monday}"')
+        con.execute(f'DELETE FROM assignments_timed WHERE week_start_date = "{monday}"')
+        con.execute(f'DELETE FROM hours WHERE week_start_date = "{monday}"')
         con.commit()
         assignments.to_sql(con=con, name='assignments', index=False, if_exists='append')
         assignments_timed.to_sql(con=con, name='assignments_timed', index=False, if_exists='append')
-        hours = pd.DataFrame()
-        hours['person_id'] = people.index
-        hours.insert(0, 'week_start_date', monday.date())
-        hours['target_hours'] = target_hours_this_week
-        hours['leftover_hours'] = people.chore_hours
-        hours.to_sql(con=con, name='hours', index=False, if_exists='append')
+        # update the hours table
+        hours_this_week['leftover_hours'] = people.chore_hours
+        hours_this_week = hours_this_week.fillna(0)
+        hours_this_week['hours_worked'] = hours_this_week.target_hours - hours_this_week.leftover_hours
+        hours_this_week['person_id'] = hours_this_week.index
+        hours_this_week.to_sql(con=con, name="hours", index=False, if_exists="append")
 
     # return the monday of the constructed chore chart
-    return str(monday.date())
+    return str(monday)
