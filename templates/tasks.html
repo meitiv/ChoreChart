@@ -48,7 +48,6 @@
 	<th>Description</th>
 	<th>Duration (hours)</th>
 	<th>Frequency (weeks)</th>
-	<th>Date Last Performed</th>
       </tr>
       {% for chore in occasional_chores.itertuples() %}
       <tr>
@@ -56,7 +55,6 @@
 	<td>{{chore.description.replace('\n', '<br>') | safe}}</td>
 	<td>{{'%.2f' % chore.duration_hours}}</td>
 	<td>{{chore.frequency_weeks}}</td>
-	<td>{{chore.date_last_performed.strftime('%m/%d/%Y')}}</td>
 	<td>
 	  <form method="POST" action="{{ url_for('delete_occasional_task') }}">
 	    <input type="hidden" name="id" value="{{ chore.id }}"></input> 
@@ -73,6 +71,18 @@
 	<tr>
 	  <td><label for="name">Chore Name:</label></td>
 	  <td><input type="text", id="name" name="name" size="50"></input></td>
+	</tr>
+	<tr>
+	  <td><label for="category">Chore Category:</label></td>
+	  <td>
+	    <select id="category", name="category">
+	      <option value="Bathrooms">Bathrooms</option>
+	      <option value="Main Kitchen">Main Kitchen</option>
+	      <option value="Other Common Areas">Other Common Areas</option>
+	      <option value="Support Roles">Support Roles</option>
+	      <option value="Occasional Tasks" selected>Occasional Tasks</option>
+	    </select>
+	  </td>
 	</tr>
 	<tr>
 	  <td><label for="description">Description:</label></td>
@@ -103,7 +113,6 @@
 	<th>Start Date</th>
 	<th>End Date</th>
 	<th>Frequency (days)</th>
-	<th>Date Last Performed</th>
       </tr>
       {% for chore in seasonal_chores.itertuples() %}
       <tr>
@@ -113,7 +122,6 @@
 	<td>{{chore.start_date}}</td>
 	<td>{{chore.end_date}}</td>
 	<td>{{chore.frequency_days}}</td>
-	<td>{{chore.date_last_performed.strftime('%m/%d/%Y')}}</td>
 	<td>
 	  <form method="POST" action="{{ url_for('delete_seasonal_task') }}">
 	    <input type="hidden" name="id" value="{{ chore.id }}"></input> 
@@ -131,6 +139,18 @@
 	  <td><input type="text", id="name" name="name" size="50"></input></td>
 	</tr>
 	<tr>
+	  <td><label for="category">Chore Category:</label></td>
+	  <td>
+	    <select id="category", name="category">
+	      <option value="Bathrooms">Bathrooms</option>
+	      <option value="Main Kitchen">Main Kitchen</option>
+	      <option value="Other Common Areas">Other Common Areas</option>
+	      <option value="Support Roles">Support Roles</option>
+	      <option value="Occasional Tasks" selected>Occasional Tasks</option>
+	    </select>
+	  </td>
+	</tr>
+	<tr>
 	  <td><label for="description">Description:</label></td>
 	  <td><textarea id="description" name="description" rows="4" cols="51"></textarea></td>
 	</tr>
@@ -139,11 +159,11 @@
 	  <td><input type="number" step="0.05" min="0" value="0.25" id="duration" name="duration" size="4"></input></td>
 	</tr>
 	<tr>
-	  <td><label for="freq">Frequency (in weeks)</label></td>
-	  <td><input type="number" step="1" min="2" value="2" id="freq" name="frequency" size="4"></input></td>
+	  <td><label for="freq">Frequency (in days)</label></td>
+	  <td><input type="number" step="1" min="7" value="7" id="freq" name="frequency" size="4"></input></td>
 	</tr>
 	<tr>
-	  <td><label for="start">Season Start (month)</label></td>
+	  <td><label for="start">Season Start (this month is included)</label></td>
 	  <td>
 	    <select id="start" name="season_start">
 	      <option value="01">January</option>
@@ -162,7 +182,7 @@
 	  </td>
 	</tr>
 	<tr>
-	  <td><label for="end">Season End (month)</label></td>
+	  <td><label for="end">Season End (this month is <b>not</b> included)</label></td>
 	  <td>
 	    <select id="end" name="season_end">
 	      <option value="01">January</option>

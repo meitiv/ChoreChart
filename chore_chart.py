@@ -130,8 +130,6 @@ def add_occasional_task():
     description = request.form["description"]
     duration = request.form["duration"]
     frequency = request.form["frequency"]
-    date = pd.Timestamp.today() - pd.Timedelta(weeks = 52)
-    date = date.strftime("%m/%d/%Y")
     with sqlite3.connect(db) as con:
         cursor = con.cursor()
         # get the MAX preference_id
@@ -151,7 +149,7 @@ def add_occasional_task():
         cursor.execute(
             f"""INSERT INTO occasional_tasks VALUES
             ('{task_id}', '{name}', 'Occasional Tasks',
-            '{description}', {duration}, {frequency}, '{date}')"""
+            '{description}', {duration}, {frequency})"""
         )
         con.commit()
     return redirect(url_for("tasks"))
@@ -162,10 +160,9 @@ def add_seasonal_task():
     description = request.form["description"]
     duration = request.form["duration"]
     frequency = request.form["frequency"]
+    category = request.form["category"]
     start = request.form["season_start"] + "/01"
     end = request.form["season_end"] + "/01"
-    date = pd.Timestamp.today() - pd.Timedelta(weeks = 52)
-    date = date.strftime("%m/%d/%Y")
     with sqlite3.connect(db) as con:
         cursor = con.cursor()
         # get the MAX preference_id
@@ -183,9 +180,9 @@ def add_seasonal_task():
         task_id = 1 + cursor.fetchone()[0]
         cursor.execute(
             f"""INSERT INTO occasional_tasks VALUES
-            ('{task_id}', '{name}', 'Occasional Tasks',
+            ('{task_id}', '{name}', '{category}',
             '{description}', {duration}, {frequency},
-            '{start}', '{end}', '{date}')"""
+            '{start}', '{end}')"""
         )
         con.commit()
     return redirect(url_for("tasks"))

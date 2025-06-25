@@ -131,11 +131,18 @@ def assign_chores():
     days_in_town = requests.query(
         f'week_start_date == "{monday}"'
     ).set_index('person_id').days_in_town.apply(count_avail_days)
-    people['chore_hours'] = (
-        (target_weekly_hours - people.parent*parent_credit_hours)*people.load_fraction*days_in_town/7
-        + deficit
-    ).fillna(0)
-
+    fraction = days_in_town/7*people.load_fraction
+    # effective number of people
+    total_people = fraction.sum()
+    # hours per person
+    target_per_person_hours = target_weekly_hours/total_people
+    # assign hours to people by fraction
+    for person_id, person in people.iterrows():
+        people.loc[person_id, 'chore_hours'] = (
+            target_per_person_hours*fraction.get(person_id, 0)
+            - parent_credit_hours*person.parent
+            + deficit.get(person_id, 0)
+        )
     # save target hours
     hours_this_week = pd.DataFrame(index = people.index)
     hours_this_week.insert(0, 'week_start_date', monday)
@@ -277,31 +284,27 @@ def assign_chores():
     # assign AM/PM dishwasher emptying
     empty_dishes_am = defaultdict(list)
     am_pref = merge_prefs(dishes_am, preferences, 'Unload Dishes AM')
-    days = list(range(7))
-    for person_id, row in am_pref.iterrows():
-        if not days: break
-        for day in days:
-            if day in row.day:
-                if people.loc[person_id, 'chore_hours'] < dishes_am_task.duration_hours:
-                    continue
-                empty_dishes_am[person_id].append(day)
-                days.remove(day)
-                row.day.remove(day)
-                people.loc[person_id, 'chore_hours'] -= dishes_am_task.duration_hours
+    for day in range(7):
+        for person_id, row in am_pref.iterrows():
+            if day not in row.day:
+                continue
+            if people.loc[person_id, 'chore_hours'] < dishes_am_task.duration_hours:
+                continue
+            empty_dishes_am[person_id].append(day)
+            people.loc[person_id, 'chore_hours'] -= dishes_am_task.duration_hours
+            break
 
     empty_dishes_pm = defaultdict(list)
     pm_pref = merge_prefs(dishes_pm, preferences, 'Unload Dishes PM')
-    days = list(range(7))
-    for person_id, row in pm_pref.iterrows():
-        if not days: break
-        for day in days:
-            if day in row.day:
-                if people.loc[person_id, 'chore_hours'] < dishes_pm_task.duration_hours:
-                    continue
-                empty_dishes_pm[person_id].append(day)
-                days.remove(day)
-                row.day.remove(day)
-                people.loc[person_id, 'chore_hours'] -= dishes_pm_task.duration_hours
+    for day in range(7):
+        for person_id, row in pm_pref.iterrows():
+            if day not in row.day:
+                continue
+            if people.loc[person_id, 'chore_hours'] < dishes_pm_task.duration_hours:
+                continue
+            empty_dishes_pm[person_id].append(day)
+            people.loc[person_id, 'chore_hours'] -= dishes_pm_task.duration_hours
+            break
 
     # construct the assignments_timed dataframe with
     # week_start_date,person_id,weekday,task_id columns

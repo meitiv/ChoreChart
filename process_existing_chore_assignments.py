@@ -8,9 +8,7 @@ import sqlite3
 import re
 
 year = 2025
-gc = pygsheets.authorize(
-    client_secret='secret/client_secret_203992576650-0d7ajmgok9i5dock35421rs5ep41bm3n.apps.googleusercontent.com.json'
-)
+gc = pygsheets.authorize(client_secret=client_secret)
 sheets = gc.open(f'CSS {year}').worksheets()
 
 task_name_map = {
@@ -73,10 +71,16 @@ def process_intown(cell_value):
         people.append(person_id)
     return pd.Series(days, index = people).rename('days_in_town').astype(float)
 
-def calc_target_hours(days_in_town):
+def calc_target_hours(days_in_town: pd.Series) -> pd.Series:
     people_copy = people.set_index('id').copy()
-    people_copy['days_in_town'] = days_in_town
-    return target_weekly_hours*people_copy.load_fraction*people_copy.days_in_town/7
+    people_copy['fraction'] = days_in_town/7*people_copy.load_fraction
+    # sum the fraction to get the effective number of people
+    total_effective_people = people_copy.fraction.sum()
+    # the per-person hours is the total weekly hours divided by the
+    # effective number of people
+    target_per_person_hours = target_weekly_hours/total_effective_people
+    # parse out the target hours
+    return target_per_person_hours*people_copy.fraction
     
 def propagate_value(column: pd.Series) -> pd.Series:
     prev_value = None
@@ -191,5 +195,3 @@ for sheet in sheets:
                     f"""INSERT INTO assignments VALUES
                     ('{date}', {person_id}, '{task_type}', {task_id})"""
                 )
-                
-        

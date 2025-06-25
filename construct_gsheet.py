@@ -1,6 +1,182 @@
-import pygsheet
+import pygsheets
 import sqlite3
 import pandas as pd
+from param import *
+from maitri_db import db
+from datetime import timedelta
+import time
 
-def construct_gsheet(monday):
-    
+class GsheetConstructor:
+    def __init__(self, monday):
+        self.monday = str(monday)
+        self.monday_dt = pd.to_datetime(monday).date()
+        self.gc = pygsheets.authorize(client_secret=client_secret, credentials_directory='secret')
+        self.con = sqlite3.connect(db)
+        self.separator_rows = []
+
+    def load_data(self):
+        self.people = pd.read_sql(con=self.con, sql="SELECT * FROM people").rename(columns = {'id': 'person_id'})
+        for task_type in ('daily', 'weekly', 'seasonal', 'occasional'):
+            df = pd.read_sql(con=self.con, sql=f"SELECT * FROM {task_type}_tasks").rename(columns = {'id': 'task_id'})
+            if task_type != 'daily': df['task_type'] = task_type
+            exec(f"self.{task_type} = df.copy()")
+        self.chores = pd.read_sql(
+            con=self.con, sql="SELECT * FROM assignments"
+        ).query(f'week_start_date == "{self.monday}"')
+        self.chores_timed = pd.read_sql(
+            con=self.con, sql="SELECT * FROM assignments_timed"
+        ).query(f'week_start_date == "{self.monday}"')
+        self.hours = pd.read_sql(
+            con=self.con, sql="SELECT * FROM hours"
+        ).query(f'week_start_date == "{self.monday}"')
+        # merge the tasks into the chores
+        self.chores_timed = self.chores_timed.merge(self.daily, on = 'task_id')
+        cols = ['task_id', 'task_type', 'task', 'category', 'description', 'duration_hours']
+        self.tasks = pd.concat(
+            (self.weekly[cols], self.seasonal[cols], self.occasional[cols])
+        )
+        self.chores = self.chores.merge(self.tasks, on = ['task_type', 'task_id'])
+        # merge people's first name
+        self.chores = self.chores.merge(self.people[['person_id', 'first_name']], on = 'person_id')
+        self.chores_timed = self.chores_timed.merge(self.people[['person_id', 'first_name']], on = 'person_id')
+        self.hours = self.hours.merge(self.people[['person_id', 'first_name']], on = 'person_id')
+
+    def create_sheet(self):
+        wbk = self.gc.open(gsheet_name)
+        # delete existing sheets that match the monday
+        for sheet in wbk.worksheets():
+            if sheet.title == self.monday:
+                wbk.del_worksheet(sheet)
+        self.sheet = wkb.add_worksheet(self.monday)
+
+    def add_header(self):
+        # add the header
+        self.sheet.get_values('B1', 'E1', returnas = 'range').merge_cells()
+        self.sheet.update_value('B1', header_text)
+        self.sheet.cell('B1').wrap_strategy = 'WRAP'
+        self.sheet.get_values('B2', 'C2', returnas = 'range').merge_cells()
+        self.sheet.get_values('D2', 'E2', returnas = 'range').merge_cells()
+        self.sheet.update_value('B2', f'Week of {self.monday}')
+        self.sheet.update_value('D2', f'Total hours: {self.hours.hours_worked.sum()}')
+        self.current_row = 3
+        self.separator_rows.append(self.current_row)
+
+    def get_day_name(self, weekday):
+        return (self.monday_dt + timedelta(days = weekday)).strftime("%a")
+
+    def set_description_cell_props(self):
+        self.sheet.cell(f'B{self.current_row}').wrap_strategy = 'WRAP'
+        self.sheet.cell(f'B{self.current_row}').set_vertical_alignment(pygsheets.custom_types.VerticalAlignment.TOP)
+
+    def set_category_cell_props(self):
+        self.sheet.cell(f'A{self.current_row}').set_vertical_alignment(pygsheets.custom_types.VerticalAlignment.MIDDLE)
+        self.sheet.cell(f'A{self.current_row}').set_text_rotation(angle, 90)
+
+    def add_meal(self):
+        meals = self.chores_timed.query('category == "Meals"')
+        self.num_meals = len(meals)
+        if self.num_meals > 1:
+            rng = self.sheet.get_values(
+                f'B{self.current_row}',
+                f'B{self.current_row + self.num_meals - 1}',
+                returnas = 'range'
+            )
+            rng.merge_cells()
+            rng.update_borders(top = True, style = border_thickness)
+        self.sheet.update_value(f'B{self.current_row}', meals.description.iloc[0])
+        self.set_description_cell_props()
+        # iterate over meals
+        for _, chore in meals.sort_values('weekday').iterrows():
+            self.sheet.update_value(
+                f'C{self.current_row}',
+                f'{chore.task} {self.get_day_name(chore.weekday)}'
+            )
+            self.sheet.cell(f'C{self.current_row}').set_text_format('bold', True)
+            self.fill_chore_info(chore)
+        self.separator_rows.append(self.current_row)
+
+    def fill_full_chore_info(self, chore):
+        self.sheet.update_value(f'B{self.current_row}', chore.description)
+        self.fill_chore_name(chore)
+        self.fill_chore_info(chore)
+
+    def fill_chore_name(self, chore):
+        self.sheet.update_value(f'C{self.current_row}', chore.task)
+        self.sheet.cell(f'C{self.current_row}').set_text_format('bold', True)
+
+    def fill_chore_info(self, chore):
+        self.sheet.update_value(f'D{self.current_row}', chore.duration_hours)
+        self.sheet.update_value(f'E{self.current_row}', chore.first_name)
+        self.sheet.update_value(f'F{self.current_row}', '☐')
+        self.current_row += 1
+
+    def draw_separators(self):
+        for row in self.separator_rows:
+            self.sheet.get_values(
+                f'A{row}', f'F{row}',returnas = 'range'
+            ).update_borders(top = True, style = border_thickness)
+
+    def merge_and_set_text(self, column, num_rows, text):
+        self.sheet.get_values(
+            f'{column}{self.current_row}', f'{column}{self.current_row + num_rows}', returnas = 'range'
+        ).merge_cells()
+        self.sheet.update_value(f'{column}{self.current_row}', text)
+
+    def add_cleanup(self):
+        self.merge_and_set_text('B', self.num_meals + 7, meal_description)
+        self.set_description_cell_props()
+        # iterate over days
+        chores = self.chores_timed.query('category == "Meal Cleanup"')
+        for day in range(7):
+            for _, chore in chores.query(f'weekday == {day}').iterrows():
+                self.sheet.update_value(
+                    f'C{self.current_row}', f'{chore.task} {self.get_day_name(day)}'
+                )
+                self.sheet.cell(f'C{self.current_row}').set_text_format('bold', True)
+                self.fill_chore_info(chore)
+        self.separator_rows.append(self.current_row)
+
+    def add_dishes(self):
+        self.merge_and_set_text('B', 13, self.daily.query('task == "Unload Dishes AM"').unique()[0])
+        self.set_description_cell_props()
+        for day in range(7):
+            for period in ('AM', 'PM'):
+                chore = self.chores_timed.loc[
+                    (self.chores_timed.weekday == day) &
+                    (self.chores_timed.task == f"Unload Dishes {period}")
+                ].squeeze()
+                self.sheet.update_value(
+                    f'C{self.current_row}', f'{chore.task} {self.get_day_name(day)}'
+                )
+                self.sheet.cell(f'C{self.current_row}').set_text_format('bold', True)
+                self.fill_chore_info(chore)
+        self.separator_rows.append(self.current_row)
+
+    def add_category_chores(self, category, collapse_description = False):
+        chores = self.chores.query(f'category == "{category}"')
+        self.merge_and_set_text('A', len(chores) - 1, category)
+        self.set_category_cell_props()
+        if collapse_description:
+            self.merge_and_set_text('B', len(chores) - 1, chores.description.unique()[0])
+            self.set_description_cell_props()
+        for _, chore in chores.iterrows():
+            if collapse_description:
+                self.fill_chore_name(chore)
+                self.fill_chore_info(chore)
+            else:
+                self.fill_full_chore_info(chore)
+        self.separator_rows.append(self.current_row)
+
+    def main(self):
+        self.load_data()
+        self.create_sheet()
+        self.add_header()
+        self.add_meal()
+        time.sleep(60)
+        self.add_cleanup()
+        time.sleep(60)
+        self.add_dishes()
+        time.sleep(60)
+        self.add_category_chores("Main Kitchen")
+        self.add_category_chores("Bathrooms", collapse_description = True)
+        self.draw_separators()
