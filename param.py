@@ -1,5 +1,6 @@
 parent_credit_hours = 1
 target_weekly_hours = 36
+max_weekly_person_hours = 5
 client_secret = 'secret/client_secret_203992576650-0d7ajmgok9i5dock35421rs5ep41bm3n.apps.googleusercontent.com.json'
 border_thickness = 'SOLID_MEDIUM'
 gsheet_name = 'Maitri Chore Chart'

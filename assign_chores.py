@@ -143,6 +143,9 @@ def assign_chores():
             - parent_credit_hours*person.parent
             + deficit.get(person_id, 0)
         )
+        # decrease the target hours if above configured max
+        if people.loc[person_id, 'chore_hours'] > max_weekly_person_hours:
+           people.loc[person_id, 'chore_hours'] = max_weekly_person_hours 
     # save target hours
     hours_this_week = pd.DataFrame(index = people.index)
     hours_this_week.insert(0, 'week_start_date', monday)
@@ -232,6 +235,7 @@ def assign_chores():
                 people.loc[person_id, 'chore_hours'] -= clean_help_task.duration_hours
 
     # assign night sweep to all days that do not have a meal
+    clean_days = sum(cook.values(), [])
     sweep_days = [d for d in range(7) if d not in clean_days]
     clean_pref = merge_prefs(clean, preferences, "Night Cleanup")
     sweep = defaultdict(list)

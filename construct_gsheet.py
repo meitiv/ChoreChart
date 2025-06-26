@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import pygsheets
 import sqlite3
 import pandas as pd
@@ -5,6 +7,7 @@ from param import *
 from maitri_db import db
 from datetime import timedelta
 import time
+import argparse
 
 class GsheetConstructor:
     def __init__(self, monday):
@@ -47,7 +50,7 @@ class GsheetConstructor:
         for sheet in wbk.worksheets():
             if sheet.title == self.monday:
                 wbk.del_worksheet(sheet)
-        self.sheet = wkb.add_worksheet(self.monday)
+        self.sheet = wbk.add_worksheet(self.monday)
 
     def add_header(self):
         # add the header
@@ -69,12 +72,18 @@ class GsheetConstructor:
         self.sheet.cell(f'B{self.current_row}').set_vertical_alignment(pygsheets.custom_types.VerticalAlignment.TOP)
 
     def set_category_cell_props(self):
-        self.sheet.cell(f'A{self.current_row}').set_vertical_alignment(pygsheets.custom_types.VerticalAlignment.MIDDLE)
-        self.sheet.cell(f'A{self.current_row}').set_text_rotation(angle, 90)
+        cell = self.sheet.cell(f'A{self.current_row}')
+        cell.wrap_strategy = 'WRAP'
+        cell.set_vertical_alignment(pygsheets.custom_types.VerticalAlignment.MIDDLE)
+        cell.set_horizontal_alignment(pygsheets.custom_types.HorizontalAlignment.CENTER)
+        cell.set_text_rotation('angle', 90)
+        cell.set_text_format('fontSize', 14)
 
     def add_meal(self):
         meals = self.chores_timed.query('category == "Meals"')
         self.num_meals = len(meals)
+        self.merge_and_set_text('A', self.num_meals - 1, "Meals")
+        self.set_category_cell_props()        
         if self.num_meals > 1:
             rng = self.sheet.get_values(
                 f'B{self.current_row}',
@@ -125,6 +134,8 @@ class GsheetConstructor:
     def add_cleanup(self):
         self.merge_and_set_text('B', self.num_meals + 7, meal_description)
         self.set_description_cell_props()
+        self.merge_and_set_text('A', self.num_meals + 7, "Kitchen Cleanup")
+        self.set_category_cell_props()        
         # iterate over days
         chores = self.chores_timed.query('category == "Meal Cleanup"')
         for day in range(7):
@@ -137,8 +148,10 @@ class GsheetConstructor:
         self.separator_rows.append(self.current_row)
 
     def add_dishes(self):
-        self.merge_and_set_text('B', 13, self.daily.query('task == "Unload Dishes AM"').unique()[0])
+        self.merge_and_set_text('B', 13, self.daily.query('task == "Unload Dishes AM"').description.unique()[0])
         self.set_description_cell_props()
+        self.merge_and_set_text('A', 13, "Dishes")
+        self.set_category_cell_props()        
         for day in range(7):
             for period in ('AM', 'PM'):
                 chore = self.chores_timed.loc[
@@ -179,4 +192,15 @@ class GsheetConstructor:
         time.sleep(60)
         self.add_category_chores("Main Kitchen")
         self.add_category_chores("Bathrooms", collapse_description = True)
+        time.sleep(60)
+        self.add_category_chores("Other Common Areas")
+        self.add_category_chores("Occasional Tasks")
+        self.add_category_chores("Support Roles")
         self.draw_separators()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('monday', type = str, help = 'monday date in YYYY-MM-DD format')
+    monday = parser.parse_args().monday
+    constructor = GsheetConstructor(monday)
+    constructor.main()
