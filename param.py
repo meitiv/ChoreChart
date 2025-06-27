@@ -11,4 +11,4 @@ meal_description = """At 7:30pm (leave visible note if it must be interrupted):
 4) clean sinks and empty drainers;
 5) sweep floor.
 For "Night Cleanup," only #3-#5, done at night."""
-header_text = """Please mark the box next to your name at the bottom of the chart, to show that you've seen (and are OK with) your chores for the week. Also, mark the box next to the chore once you've finished it."""
+header_text = """Please mark the box next to your name in the cell below, to show that you've seen (and are OK with) your chores for the week. Also, mark the box next to the chore once you've finished it."""

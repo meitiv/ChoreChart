@@ -59,9 +59,14 @@ class GsheetConstructor:
         self.sheet.cell('B1').wrap_strategy = 'WRAP'
         self.sheet.get_values('B2', 'C2', returnas = 'range').merge_cells()
         self.sheet.get_values('D2', 'E2', returnas = 'range').merge_cells()
-        self.sheet.update_value('B2', f'Week of {self.monday}')
-        self.sheet.update_value('D2', f'Total hours: {self.hours.hours_worked.sum()}')
-        self.current_row = 3
+        self.sheet.cell('B2').set_text_format('bold', True).value = f'Week of {self.monday}'
+        self.sheet.cell('D2').set_text_format('bold', True).value = f'Total hours: {self.hours.hours_worked.sum()}'
+        self.current_row = 4
+        rows = [['Name', 'Days in town', 'Chore Hours']]
+        for _, row in self.hours.query('hours_worked > 0').iterrows():
+            rows.append([row.first_name, f'{row.days_in_town}d', f'{row.hours_worked}hrs', '☐'])
+            self.current_row += 1
+        self.sheet.update_values('B3', rows)
         self.separator_rows.append(self.current_row)
 
     def get_day_name(self, weekday):
@@ -77,7 +82,7 @@ class GsheetConstructor:
         cell.set_vertical_alignment(pygsheets.custom_types.VerticalAlignment.MIDDLE)
         cell.set_horizontal_alignment(pygsheets.custom_types.HorizontalAlignment.CENTER)
         cell.set_text_rotation('angle', 90)
-        cell.set_text_format('fontSize', 14)
+        cell.set_text_format('fontSize', 12)
 
     def add_meal(self):
         meals = self.chores_timed.query('category == "Meals"')
@@ -132,9 +137,9 @@ class GsheetConstructor:
         self.sheet.update_value(f'{column}{self.current_row}', text)
 
     def add_cleanup(self):
-        self.merge_and_set_text('B', self.num_meals + 7, meal_description)
+        self.merge_and_set_text('B', self.num_meals + 6, meal_description)
         self.set_description_cell_props()
-        self.merge_and_set_text('A', self.num_meals + 7, "Kitchen Cleanup")
+        self.merge_and_set_text('A', self.num_meals + 6, "Night Cleanup")
         self.set_category_cell_props()        
         # iterate over days
         chores = self.chores_timed.query('category == "Meal Cleanup"')
@@ -167,6 +172,7 @@ class GsheetConstructor:
 
     def add_category_chores(self, category, collapse_description = False):
         chores = self.chores.query(f'category == "{category}"')
+        if chores.empty: return
         self.merge_and_set_text('A', len(chores) - 1, category)
         self.set_category_cell_props()
         if collapse_description:
@@ -180,19 +186,23 @@ class GsheetConstructor:
                 self.fill_full_chore_info(chore)
         self.separator_rows.append(self.current_row)
 
+    def add_time_tally(self):
+        pass
+
     def main(self):
+        sleep_sec = 30
         self.load_data()
         self.create_sheet()
         self.add_header()
         self.add_meal()
-        time.sleep(60)
+        time.sleep(sleep_sec)
         self.add_cleanup()
-        time.sleep(60)
+        time.sleep(sleep_sec)
         self.add_dishes()
-        time.sleep(60)
+        time.sleep(sleep_sec)
         self.add_category_chores("Main Kitchen")
         self.add_category_chores("Bathrooms", collapse_description = True)
-        time.sleep(60)
+        time.sleep(sleep_sec)
         self.add_category_chores("Other Common Areas")
         self.add_category_chores("Occasional Tasks")
         self.add_category_chores("Support Roles")
