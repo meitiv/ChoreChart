@@ -61,8 +61,9 @@ class GsheetConstructor:
         self.sheet.get_values('D2', 'E2', returnas = 'range').merge_cells()
         self.sheet.cell('B2').set_text_format('bold', True).value = f'Week of {self.monday}'
         self.sheet.cell('D2').set_text_format('bold', True).value = f'Total hours: {self.hours.hours_worked.sum()}'
+        self.separator_rows.append(3)
         self.current_row = 4
-        rows = [['Name', 'Days in town', 'Chore hours', 'Mark acceptance']]
+        rows = [['Name', 'Days in town', 'Hours', 'Accept']]
         for _, row in self.hours.query('hours_worked > 0').iterrows():
             rows.append([row.first_name, f'{round(row.days_in_town)}d', f'{row.hours_worked} hrs', '☐'])
             self.current_row += 1
