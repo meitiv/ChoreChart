@@ -62,9 +62,9 @@ class GsheetConstructor:
         self.sheet.cell('B2').set_text_format('bold', True).value = f'Week of {self.monday}'
         self.sheet.cell('D2').set_text_format('bold', True).value = f'Total hours: {self.hours.hours_worked.sum()}'
         self.current_row = 4
-        rows = [['Name', 'Days in town', 'Chore Hours']]
+        rows = [['Name', 'Days in town', 'Chore hours', 'Mark acceptance']]
         for _, row in self.hours.query('hours_worked > 0').iterrows():
-            rows.append([row.first_name, f'{row.days_in_town}d', f'{row.hours_worked}hrs', '☐'])
+            rows.append([row.first_name, f'{round(row.days_in_town)}d', f'{row.hours_worked} hrs', '☐'])
             self.current_row += 1
         self.sheet.update_values('B3', rows)
         self.separator_rows.append(self.current_row)
@@ -111,6 +111,7 @@ class GsheetConstructor:
 
     def fill_full_chore_info(self, chore):
         self.sheet.update_value(f'B{self.current_row}', chore.description)
+        self.sheet.cell(f'B{self.current_row}').wrap_strategy = 'WRAP'
         self.fill_chore_name(chore)
         self.fill_chore_info(chore)
 
@@ -186,8 +187,9 @@ class GsheetConstructor:
                 self.fill_full_chore_info(chore)
         self.separator_rows.append(self.current_row)
 
-    def add_time_tally(self):
-        pass
+    def adjust_column_widths(self):
+        for col_idx, width in gsheet_column_widths.items():
+            self.sheet.adjust_column_width(col_idx, pixel_size = width)
 
     def main(self):
         sleep_sec = 30
@@ -207,10 +209,12 @@ class GsheetConstructor:
         self.add_category_chores("Occasional Tasks")
         self.add_category_chores("Support Roles")
         self.draw_separators()
+        self.adjust_column_widths()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('monday', type = str, help = 'monday date in YYYY-MM-DD format')
+    parser.add_argument('monday', type = str,
+                        help = 'monday date in YYYY-MM-DD format')
     monday = parser.parse_args().monday
     constructor = GsheetConstructor(monday)
     constructor.main()
