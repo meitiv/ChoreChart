@@ -32,15 +32,15 @@ def get_table(con, table, parse_dates = None):
     return pd.read_sql(con=con, sql=f"SELECT * FROM {table}",
                        parse_dates=parse_dates)
 
-def get_people_and_days(column, requests):
+def get_people_and_days(values):
     # returns a pd.Series with person_id as index and days as values
     # column argument is the name of the requests column to use
-    df = requests[['person_id', column]].copy()
-    df['day'] = df[column].apply(get_weekdays)
-    df = df.drop(columns = [column]).explode('day').dropna()
-    df = df.groupby('person_id')['day'].apply(list).reset_index()
-    df['num_days'] = df.day.apply(len)
-    return df.set_index('person_id').sort_values('num_days')
+    day = values.apply(get_weekdays).rename('day')
+    num_days = day.apply(len).rename('num_days')
+    return pd.concat(
+        (day, num_days),
+        axis = 1
+    ).sort_values('num_days').query('num_days > 0')
 
 def merge_prefs(avail_df, pref_df, task_name):
     return avail_df.merge(
@@ -122,16 +122,22 @@ def assign_chores():
         # get last week's hourly deficit
         deficit = pd.read_sql(
             con=con,
-            sql=f"""
-            SELECT person_id, leftover_hours FROM hours
+            sql=f"""SELECT person_id, leftover_hours FROM hours
             WHERE week_start_date = '{this_monday}'"""
         ).set_index('person_id').squeeze()
 
+    # get availability for various tasks
+    requests = requests.query(f'week_start_date == "{monday}"').set_index('person_id')
+    intown = get_people_and_days(requests.days_in_town)
+    meal = get_people_and_days(requests.cook_meal)
+    clean = get_people_and_days(requests.meal_cleanup)
+    sweep = get_people_and_days(requests.night_sweep)
+    dishes_am = get_people_and_days(requests.dishes_am)
+    dishes_pm = get_people_and_days(requests.dishes_pm)
+
     # compute target hours
-    days_in_town = requests.query(
-        f'week_start_date == "{monday}"'
-    ).set_index('person_id').days_in_town.apply(count_avail_days)
-    fraction = days_in_town/7*people.load_fraction
+    # available fraction: it is 1 if a person is in town and at full load
+    fraction = (intown.num_days/7*people.load_fraction).fillna(0)
     # effective number of people
     total_people = fraction.sum()
     # hours per person
@@ -139,28 +145,19 @@ def assign_chores():
     # assign hours to people by fraction
     for person_id, person in people.iterrows():
         people.loc[person_id, 'chore_hours'] = (
-            target_per_person_hours*fraction.get(person_id, 0)
-            - parent_credit_hours*person.parent
-            + deficit.get(person_id, 0)
+            target_per_person_hours*fraction.get(person_id, 0) + deficit.get(person_id, 0)
         )
         # decrease the target hours if above configured max
         if people.loc[person_id, 'chore_hours'] > max_weekly_person_hours:
-           people.loc[person_id, 'chore_hours'] = max_weekly_person_hours 
+           people.loc[person_id, 'chore_hours'] = max_weekly_person_hours
+    # subtract the parental credit multiplied by the fraction
+    people['chore_hours'] -= people.parent*fraction
     # save target hours
     hours_this_week = pd.DataFrame(index = people.index)
     hours_this_week.insert(0, 'week_start_date', monday)
-    hours_this_week['days_in_town'] = days_in_town
+    hours_this_week['days_in_town'] = intown.num_days
     hours_this_week['target_hours'] = people.chore_hours
     hours_this_week = hours_this_week.fillna(0)
-    
-    # people available to cook the house meal, cleanup, sweep
-    requests = requests.query(f'week_start_date == "{monday}"')
-    intown = get_people_and_days('days_in_town', requests)
-    meal = get_people_and_days('cook_meal', requests)
-    clean = get_people_and_days('meal_cleanup', requests)
-    sweep = get_people_and_days('night_sweep', requests)
-    dishes_am = get_people_and_days('dishes_am', requests)
-    dishes_pm = get_people_and_days('dishes_pm', requests)
 
     # get the task data
     meal_task = daily.query('task == "House Meal"').squeeze()
@@ -172,6 +169,7 @@ def assign_chores():
 
     cook = defaultdict(list)
     max_gap = 7
+    print(meal)
     for person_id, row in meal.iterrows():
         # make sure the cook has enough remaining hours
         if people.loc[person_id, 'chore_hours'] < meal_task.duration_hours:
