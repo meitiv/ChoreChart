@@ -9,6 +9,7 @@ import re
 import sys
 from collections import defaultdict
 from datetime import timedelta, datetime
+from process_existing_chore_assignments import calc_target_hours
 
 def get_max_gap(days: List[int]) -> int:
     # calculate the largest circular gap between days
@@ -135,29 +136,13 @@ def assign_chores():
     dishes_am = get_people_and_days(requests.dishes_am)
     dishes_pm = get_people_and_days(requests.dishes_pm)
 
-    # compute target hours
-    # available fraction: it is 1 if a person is in town and at full load
-    fraction = (intown.num_days/7*people.load_fraction).fillna(0)
-    # effective number of people
-    total_people = fraction.sum()
-    # hours per person
-    target_per_person_hours = target_weekly_hours/total_people
-    # assign hours to people by fraction
-    for person_id, person in people.iterrows():
-        people.loc[person_id, 'chore_hours'] = (
-            target_per_person_hours*fraction.get(person_id, 0) + deficit.get(person_id, 0)
-        )
-        # decrease the target hours if above configured max
-        if people.loc[person_id, 'chore_hours'] > max_weekly_person_hours:
-           people.loc[person_id, 'chore_hours'] = max_weekly_person_hours
-    # subtract the parental credit multiplied by the fraction
-    people['chore_hours'] -= people.parent*fraction
     # save target hours
     hours_this_week = pd.DataFrame(index = people.index)
     hours_this_week.insert(0, 'week_start_date', monday)
     hours_this_week['days_in_town'] = intown.num_days
-    hours_this_week['target_hours'] = people.chore_hours
+    hours_this_week['target_hours'] = calc_target_hours(people, intown.num_days, deficit)
     hours_this_week = hours_this_week.fillna(0)
+    people['chore_hours'] = hours_this_week.target_hours
 
     # get the task data
     meal_task = daily.query('task == "House Meal"').squeeze()

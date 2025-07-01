@@ -397,4 +397,4 @@ def display_assignment(monday):
     return render_template("assignment.html", monday=monday, chores=chores, hours=hours)
 
 if __name__ == '__main__':
-    app.run(debug = True)
+    app.run(debug = False)

@@ -13,7 +13,10 @@ class GsheetConstructor:
     def __init__(self, monday):
         self.monday = str(monday)
         self.monday_dt = pd.to_datetime(monday).date()
-        self.gc = pygsheets.authorize(client_secret=client_secret, credentials_directory='secret')
+        self.gc = pygsheets.authorize(
+            client_secret=client_secret,
+            credentials_directory='secret'
+        )
         self.con = sqlite3.connect(db)
         self.separator_rows = []
 

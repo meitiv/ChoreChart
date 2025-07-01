@@ -8,7 +8,10 @@ import sqlite3
 import re
 
 year = 2025
-gc = pygsheets.authorize(client_secret=client_secret)
+gc = pygsheets.authorize(
+    client_secret=client_secret,
+    credentials_directory='secret'
+)
 sheets = gc.open(f'CSS {year}').worksheets()
 
 task_name_map = {
@@ -71,16 +74,34 @@ def process_intown(cell_value):
         people.append(person_id)
     return pd.Series(days, index = people).rename('days_in_town').astype(float)
 
-def calc_target_hours(days_in_town: pd.Series) -> pd.Series:
-    people_copy = people.set_index('id').copy()
-    people_copy['fraction'] = days_in_town/7*people_copy.load_fraction
+def calc_target_hours(people: pd.DataFrame, days_in_town: pd.Series, deficit: pd.Series = None) -> pd.Series:
+    people_copy = people.reset_index().set_index('id').copy()
+    fraction = days_in_town/7*people_copy.load_fraction
     # sum the fraction to get the effective number of people
-    total_effective_people = people_copy.fraction.sum()
+    total_effective_people = fraction.sum()
     # the per-person hours is the total weekly hours divided by the
     # effective number of people
-    target_per_person_hours = target_weekly_hours/total_effective_people
-    # parse out the target hours
-    return target_per_person_hours*people_copy.fraction
+    total_hours = target_weekly_hours
+    if deficit is not None:
+        total_hours += deficit.sum()
+
+    target_per_person_hours = total_hours/total_effective_people
+    # assign hours to people by fraction
+    people_copy['chore_hours'] = target_per_person_hours*fraction
+    # this is the reduction factor that will assure that nobody's
+    # total is greater than the max_weekly_person_hours configures in
+    # param.py
+    if deficit is not None:
+        people_copy['deficit'] = deficit
+        people_copy['deficit'] = people_copy.deficit.fillna(0)
+        people_copy['chore_hours'] += people_copy.deficit
+
+    reduction_factor = max_weekly_person_hours/target_per_person_hours
+    # if the factor is 1 or greater, don't need to do anything
+    people_copy['chore_hours'] *= reduction_factor if reduction_factor < 1 else 1
+    # subtract the parental credit multiplied by the fraction
+    people_copy['chore_hours'] -= people_copy.parent*fraction
+    return people_copy.chore_hours
     
 def propagate_value(column: pd.Series) -> pd.Series:
     prev_value = None
@@ -135,63 +156,67 @@ def get_weekday(task_name):
     if day_letter == 'Sat' or day_letter == 'Sa': return 5
     if day_letter == 'Sun' or day_letter == 'Su': return 6
 
-for sheet in sheets:
-    date = process_date(sheet.title)
-    if date is None:
-        print('Skipping', sheet.title)
-        continue
-    print('Processing', date, 'chores')
-    chores = sheet.get_as_df(
-        has_header = False,
-        start = 'C3',
-        end = 'E89'
-    )
-    # get the hours and days in town
-    hours = process_hours(sheet.get_value('B98'))
-    days_in_town = process_intown(sheet.get_value('B96'))
+def main():
+    for sheet in sheets:
+        date = process_date(sheet.title)
+        if date is None:
+            print('Skipping', sheet.title)
+            continue
+        print('Processing', date, 'chores')
+        chores = sheet.get_as_df(
+            has_header = False,
+            start = 'C3',
+            end = 'E89'
+        )
+        # get the hours and days in town
+        hours = process_hours(sheet.get_value('B98'))
+        days_in_town = process_intown(sheet.get_value('B96'))
 
-    # propagate chore names
-    chores[0] = propagate_value(chores[0])
-    # remove rows without name
-    chores = chores[chores[2].astype(bool)]
-    prev_task_name = ''
-    with sqlite3.connect(db) as con:
-        cur = con.cursor()
-        # update the hours table
-        cur.execute(
-            f"DELETE FROM hours WHERE week_start_date = '{date}'"
-        )
-        hours = pd.concat((hours, days_in_town), axis = 1).fillna(0)
-        people_copy = people.set_index('id')
-        hours['target_hours'] = calc_target_hours(hours.days_in_town)
-        hours['leftover_hours'] = hours.target_hours - hours.hours_worked
-        hours = hours.reset_index().rename(columns = {'index': 'person_id'})
-        hours.insert(0, 'week_start_date', date)
-        hours.to_sql(con=con, name='hours', index=False, if_exists='append')        
-        # clear the assignments for this week first
-        cur.execute(
-            f"DELETE FROM assignments_timed WHERE week_start_date = '{date}'"
-        )
-        cur.execute(
-            f"DELETE FROM assignments WHERE week_start_date = '{date}'"
-        )
-        for _, row in chores.iterrows():
-            chore_name = process_task_name(row[0], row[0] == prev_task_name)
-            prev_task_name = row[0]
-            task_type, task_id = match_task(chore_name)
-            person_id = match_person(row[2])
-            if task_id is None or person_id is None:
-                continue
-            if task_type == 'daily':
-                weekday = get_weekday(row[0])
-                # print('Inserting', date, person_id, weekday, task_id, 'into assignments_timed')
-                cur.execute(
-                    f"""INSERT INTO assignments_timed VALUES
-                    ('{date}', {person_id}, {weekday}, {task_id})"""
-                )
-            else:
-                # print('Inserting', date, person_id, task_id, 'into assignments')
-                cur.execute(
-                    f"""INSERT INTO assignments VALUES
-                    ('{date}', {person_id}, '{task_type}', {task_id})"""
-                )
+        # propagate chore names
+        chores[0] = propagate_value(chores[0])
+        # remove rows without name
+        chores = chores[chores[2].astype(bool)]
+        prev_task_name = ''
+        with sqlite3.connect(db) as con:
+            cur = con.cursor()
+            # update the hours table
+            cur.execute(
+                f"DELETE FROM hours WHERE week_start_date = '{date}'"
+            )
+            hours = pd.concat((hours, days_in_town), axis = 1).fillna(0)
+            people_copy = people.set_index('id')
+            hours['target_hours'] = calc_target_hours(people, hours.days_in_town)
+            hours['leftover_hours'] = hours.target_hours - hours.hours_worked
+            hours = hours.reset_index().rename(columns = {'index': 'person_id'})
+            hours.insert(0, 'week_start_date', date)
+            hours.to_sql(con=con, name='hours', index=False, if_exists='append')        
+            # clear the assignments for this week first
+            cur.execute(
+                f"DELETE FROM assignments_timed WHERE week_start_date = '{date}'"
+            )
+            cur.execute(
+                f"DELETE FROM assignments WHERE week_start_date = '{date}'"
+            )
+            for _, row in chores.iterrows():
+                chore_name = process_task_name(row[0], row[0] == prev_task_name)
+                prev_task_name = row[0]
+                task_type, task_id = match_task(chore_name)
+                person_id = match_person(row[2])
+                if task_id is None or person_id is None:
+                    continue
+                if task_type == 'daily':
+                    weekday = get_weekday(row[0])
+                    # print('Inserting', date, person_id, weekday, task_id, 'into assignments_timed')
+                    cur.execute(
+                        f"""INSERT INTO assignments_timed VALUES
+                        ('{date}', {person_id}, {weekday}, {task_id})"""
+                    )
+                else:
+                    # print('Inserting', date, person_id, task_id, 'into assignments')
+                    cur.execute(
+                        f"""INSERT INTO assignments VALUES
+                        ('{date}', {person_id}, '{task_type}', {task_id})"""
+                    )
+
+if __name__ == '__main__':
+    main()
