@@ -16,7 +16,7 @@ class GsheetConstructor:
         # error out if monday is not a monday
         if self.monday_dt.weekday() != 0:
             raise ValueError('{} is not a Monday'.format(monday))
-        self.gc = pygsheets.authorize(service_file='secret/maitrichorechart-339d26170a7c.json')
+        self.gc = pygsheets.authorize(service_file=service_file)
         self.con = sqlite3.connect(db)
         self.separator_rows = []
 

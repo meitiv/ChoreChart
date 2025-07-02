@@ -87,7 +87,7 @@ class ChoreChartReader:
         self.occasional = pd.read_sql(con=self.con, sql='SELECT * FROM occasional_tasks')
 
     def connect_sheet(self):
-        gc = pygsheets.authorize(service_file='secret/maitrichorechart-339d26170a7c.json')
+        gc = pygsheets.authorize(service_file=service_file)
         self.sheets = gc.open(f'CSS {self.year}').worksheets()
         
     def match_person(self, first_name):
