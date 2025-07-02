@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from flask import Flask, redirect, request
+from flask import Flask, redirect, request, flash
 from flask import render_template
 from flask import url_for
 import sqlite3
@@ -9,8 +9,12 @@ import numpy as np
 from datetime import date, timedelta
 from maitri_db import db
 import assign_chores
+import construct_gsheet
+import multiprocessing
+from construct_gsheet import GsheetConstructor
 
 app = Flask(__name__)
+app.secret_key = 'compassionatecommunication'
 
 def int_to_bits(number: int):
     return list(np.binary_repr(number, 7))
@@ -396,5 +400,13 @@ def display_assignment(monday):
         chores[person_name] = pd.DataFrame(rows)
     return render_template("assignment.html", monday=monday, chores=chores, hours=hours)
 
+@app.route("/make_gsheet/<monday>")
+def make_gsheet(monday):
+    constructor = GsheetConstructor(monday)
+    process = multiprocessing.Process(target = constructor.main)
+    process.start()
+    flash("Constructing the GSheet")
+    return render_template("index.html")
+
 if __name__ == '__main__':
-    app.run(debug = False)
+    app.run(debug = True)

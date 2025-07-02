@@ -13,10 +13,10 @@ class GsheetConstructor:
     def __init__(self, monday):
         self.monday = str(monday)
         self.monday_dt = pd.to_datetime(monday).date()
-        self.gc = pygsheets.authorize(
-            client_secret=client_secret,
-            credentials_directory='secret'
-        )
+        # error out if monday is not a monday
+        if self.monday_dt.weekday() != 0:
+            raise ValueError('{} is not a Monday'.format(monday))
+        self.gc = pygsheets.authorize(service_file='secret/maitrichorechart-339d26170a7c.json')
         self.con = sqlite3.connect(db)
         self.separator_rows = []
 
@@ -48,7 +48,7 @@ class GsheetConstructor:
         self.hours = self.hours.merge(self.people[['person_id', 'first_name']], on = 'person_id')
 
     def create_sheet(self):
-        wbk = self.gc.open(gsheet_name)
+        wbk = self.gc.open_by_key(gsheet_key)
         # delete existing sheets that match the monday
         for sheet in wbk.worksheets():
             if sheet.title == self.monday:

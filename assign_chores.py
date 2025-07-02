@@ -9,7 +9,6 @@ import re
 import sys
 from collections import defaultdict
 from datetime import timedelta, datetime
-from process_existing_chore_assignments import calc_target_hours
 
 def get_max_gap(days: List[int]) -> int:
     # calculate the largest circular gap between days
@@ -99,6 +98,15 @@ def get_hours_worked(monday, assignments, assignments_timed,
     hours = chores.groupby('person_id').duration_hours.sum()
     return pd.concat((hours, hours_timed), axis = 1).fillna(0).sum(axis = 1)
 
+def calc_target_hours(people, days_in_town, deficit):
+    fraction = (people.load_fraction*days_in_town/7).fillna(0)
+    per_person_target = target_weekly_hours/fraction.sum()
+    target_hours = (per_person_target*fraction).add(deficit, fill_value = 0)
+    target_hours *= max_weekly_person_hours/target_hours.max()
+    target_hours = target_hours - people.parent*parent_credit_hours
+    target_hours = target_hours[target_hours > 0]
+    return target_hours
+
 def assign_chores():
     # read the data
     with sqlite3.connect(db) as con:
@@ -121,11 +129,8 @@ def assign_chores():
             axis = 1
         )
         # get last week's hourly deficit
-        deficit = pd.read_sql(
-            con=con,
-            sql=f"""SELECT person_id, leftover_hours FROM hours
-            WHERE week_start_date = '{this_monday}'"""
-        ).set_index('person_id').squeeze()
+        deficit = pd.read_sql(con=con, sql=f"""SELECT person_id, leftover_hours FROM hours
+        WHERE week_start_date = '{this_monday}'""").set_index('person_id').squeeze()
 
     # get availability for various tasks
     requests = requests.query(f'week_start_date == "{monday}"').set_index('person_id')
@@ -143,6 +148,8 @@ def assign_chores():
     hours_this_week['target_hours'] = calc_target_hours(people, intown.num_days, deficit)
     hours_this_week = hours_this_week.fillna(0)
     people['chore_hours'] = hours_this_week.target_hours
+    print(people[['first_name', 'chore_hours']])
+    print('Total:', people.chore_hours.sum())
 
     # get the task data
     meal_task = daily.query('task == "House Meal"').squeeze()
@@ -154,7 +161,6 @@ def assign_chores():
 
     cook = defaultdict(list)
     max_gap = 7
-    print(meal)
     for person_id, row in meal.iterrows():
         # make sure the cook has enough remaining hours
         if people.loc[person_id, 'chore_hours'] < meal_task.duration_hours:
