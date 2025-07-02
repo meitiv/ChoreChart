@@ -8,8 +8,9 @@
   <h2><a href="/">Homepage</a></h2>
   <h2><a href="/people">People</a></h2>
   <h2><a href="/tasks">Chores</a></h2>
-  <h2><a href="{{ url_for('make_gsheet', monday = monday) }}">Export
-  to GSheets</a></h2>
+  <h2><a href="{{ url_for('make_gsheet', monday = monday) }}">Export 
+  Assignments to a GSheet</a></h2> 
+    
   <h2>Chore Assignments for Week Beginnging on {{monday}}</h2>
   {% for name, person_chores in chores.items() %}
   <h3>Chores for {{name}}</h3>
