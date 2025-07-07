@@ -10,15 +10,13 @@
   <h2>Maitri Folk</h2>
   <table>
     <tr>
-      <th>First Name</th>
-      <th>Last Name</th>
+      <th>Name</th>
       <th>Parent</th>
       <th>Load (0-1)</th>
     </tr>
     {% for person in people.itertuples() %}
     <tr>
       <td>{{person.first_name}}</td>
-      <td>{{person.last_name}}</td>
       <form method="POST" action="{{ url_for('update_person') }}">
 	<input type="hidden" name="id" value="{{ person.id }}"></input> 
 	<td>
