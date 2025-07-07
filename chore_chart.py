@@ -377,9 +377,7 @@ def display_assignment(monday):
     chores = {}
     hours = {} # total number of hours
     for person_id in people_ids:
-        person_name = ' '.join((
-            people.loc[person_id, 'first_name'], people.loc[person_id, 'last_name']
-        ))
+        person_name = people.loc[person_id, 'first_name']
         hours[person_name] = people.loc[person_id, 'hours']
         rows = []
         for _, chore in assign_timed.query(f'person_id == {person_id}').sort_values('weekday').iterrows():
