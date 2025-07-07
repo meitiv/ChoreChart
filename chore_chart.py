@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from flask import Flask, redirect, request, flash
+from flask import Flask, redirect, request, flash, send_from_directory
 from flask import render_template
 from flask import url_for
 import sqlite3
@@ -18,6 +18,10 @@ app.secret_key = 'compassionatecommunication'
 
 def int_to_bits(number: int):
     return list(np.binary_repr(number, 7))
+
+@app.route("/robots.txt")
+def robots():
+    return send_from_directory("static", "robots.txt")
 
 @app.route("/")
 def landing_page():
