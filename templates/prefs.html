@@ -22,8 +22,8 @@
 	{% endfor %}
       </tr>
     </thead>
-    <tbody>
     <form method="POST" action="{{ url_for('prefs') }}">
+    <tbody>
       {% for task in prefs.index.levels[0] %}
       <tr>
 	<td>{{task}}</td>
@@ -37,13 +37,15 @@
 	{% endfor %}
       </tr>
       {% endfor %}
+    </tbody>
+    <tfoot>
       <tr>
 	<td colspan="{{ prefs.index.levels[1].size + 1 }}" class="center-text">
 	  <input type="submit" value="Update Chore Preferences">
 	</td>
       </tr>
+    </tfoot>
     </form>
-    </tbody>
   </table>
   </div>
 </body>

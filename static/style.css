@@ -5,6 +5,13 @@ table, th, td {
     background: #009688;
     position: sticky;
     top: 0;
+    border-bottom: 2px solid #ccc;
+}
+.fixed-head tfoot {
+    position: sticky;
+    bottom: 0;
+    border-top: 2px solid #ccc;
+    background: #009688;
 }
 .fixed-head {
     display: block;
