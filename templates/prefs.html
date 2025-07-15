@@ -12,13 +12,16 @@
     0: never want to do this chore
     <br>to<br>
     5: love to do this chore</h3>
-  <table>
-    <tr>
-      <th>Chore</th>
+  <table class="fixed-header">
+    <thead>
+      <tr>
+        <th>Chore</th>
 	{% for name in prefs.index.levels[1] %}
-	<th>{{name}}</th>
+	    <th>{{name}}</th>
 	{% endfor %}
-    </tr>
+      </tr>
+    </thead>
+    <tbody class="scrollable">
     <form method="POST" action="{{ url_for('prefs') }}">
       {% for task in prefs.index.levels[0] %}
       <tr>
@@ -28,7 +31,7 @@
 	  <input type="number"
 		 value="{{ prefs.loc[(task, name), 'preference'] }}"
 		 name="{{ prefs.loc[(task, name), 'id'] }}"
-		 step="1" min="0" max="5"></input>
+		 step="1" min="0" max="5"/>
 	</td>
 	{% endfor %}
       </tr>
@@ -39,6 +42,7 @@
 	</td>
       </tr>
     </form>
+    </tbody>
   </table>
 </body>
 </html>
