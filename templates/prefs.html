@@ -12,7 +12,8 @@
     0: never want to do this chore
     <br>to<br>
     5: love to do this chore</h3>
-  <table class="fixed-header">
+  <div class="fixed-head">
+  <table>
     <thead>
       <tr>
         <th>Chore</th>
@@ -21,7 +22,7 @@
 	{% endfor %}
       </tr>
     </thead>
-    <tbody class="scrollable">
+    <tbody>
     <form method="POST" action="{{ url_for('prefs') }}">
       {% for task in prefs.index.levels[0] %}
       <tr>
@@ -44,5 +45,6 @@
     </form>
     </tbody>
   </table>
+  </div>
 </body>
 </html>

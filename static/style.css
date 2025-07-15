@@ -1,21 +1,18 @@
 table, th, td {
     border: 1px solid;
 }
-.fixed-header thead {
+.fixed-head thead th {
+    background: #009688;
     position: sticky;
     top: 0;
-    z-index: 1;
 }
-.scrollable {
-  display: block;
-  overflow-y: auto;
-  max-height: 500px;
+.fixed-head {
+    display: block;
+    overflow-y: scroll;
+    height: 500px;
 }
 th, td {
     padding: 5px;
-}
-th.frac, td.frac {
-    width: 50px;
 }
 .center-text {
     text-align: center;
