@@ -30,10 +30,7 @@ def landing_page():
 @app.route("/people")
 def people():
     with sqlite3.connect(db) as con:
-        people = pd.read_sql(
-            con = con,
-            sql = "SELECT * FROM people"
-        )
+        people = pd.read_sql(con=con, sql="SELECT * FROM people")
     return render_template("people.html", people = people)
 
 @app.route("/update_person", methods=["POST"])
@@ -43,27 +40,26 @@ def update_person():
     if load_fraction < 0: load_fraction = 0
     if load_fraction > 1: load_fraction = 1
     parent = 1 if "parent" in request.form else 0
+    active = 1 if "active" in request.form else 0
     with sqlite3.connect(db) as con:
         cursor = con.cursor()
         cursor.execute(
-            f"""UPDATE people SET load_fraction = {load_fraction}
+            f"""UPDATE people SET
+            load_fraction = {load_fraction},
+            parent = {parent},
+            active = {active}
             WHERE id = {person_id}"""
         )
-        cursor.execute(
-            f"UPDATE people SET parent = {parent} WHERE id = {person_id}"
-        )        
         con.commit()            
-
     return redirect(url_for("people"))
-
 
 @app.route("/add_person", methods=["POST"])
 def add_person():
     first_name = request.form["first_name"]
     last_name = request.form["last_name"]
     frac = float(request.form["frac"])
+    email = request.form["email"]
     parent = 1 if "parent" in request.form else 0
-    deficit = 0
     with sqlite3.connect(db) as con:
         cursor = con.cursor()
         cursor.execute("SELECT MAX(id) FROM people")
@@ -71,14 +67,11 @@ def add_person():
         cursor.execute(
             f"""INSERT INTO people
             VALUES ('{person_id}', '{first_name}', '{last_name}',
-            {frac}, {parent}, {deficit})"""
+            {frac}, {parent}, 1, {email})"""
         )
         con.commit()
         # create default chore preferences for this person
-        prefs = pd.read_sql(
-            con = con,
-            sql = "SELECT DISTINCT task, task_type FROM preferences"
-        )
+        prefs = pd.read_sql(con=con, sql="SELECT DISTINCT task, task_type FROM preferences")
         prefs["person_id"] = person_id
         prefs["preference"] = 3
         # reindex to make sure no duplicate ids exist
@@ -92,23 +85,6 @@ def add_person():
             index_label = "id"
         )
 
-    return redirect(url_for("people"))
-
-@app.route("/delete_person", methods=["POST"])
-def delete_person():
-    person_id = request.form["id"]
-    with sqlite3.connect(db) as con:
-        cursor = con.cursor()
-        cursor.execute(
-            f"DELETE FROM people WHERE id = {person_id}"
-        )
-        cursor.execute(
-            f"DELETE FROM preferences WHERE person_id = {person_id}"
-        )
-        cursor.execute(
-            f"DELETE FROM requests WHERE person_id = {person_id}"
-        )
-        con.commit()
     return redirect(url_for("people"))
 
 @app.route("/tasks")
@@ -144,7 +120,7 @@ def add_occasional_task():
         cursor.execute("SELECT MAX(id) FROM preferences")
         pref_id = cursor.fetchone()[0]
         # get all person ids
-        cursor.execute("SELECT id FROM people")
+        cursor.execute("SELECT id FROM people WHERE active")
         for person_id in cursor.fetchall():
             pref_id += 1
             cursor.execute(
@@ -177,7 +153,7 @@ def add_seasonal_task():
         cursor.execute("SELECT MAX(id) FROM preferences")
         pref_id = cursor.fetchone()[0]
         # get all person ids
-        cursor.execute("SELECT id FROM people")
+        cursor.execute("SELECT id FROM people WHERE active")
         for person_id in cursor.fetchall():
             pref_id += 1
             cursor.execute(
@@ -239,7 +215,7 @@ def prefs():
                 cur.execute(f"UPDATE preferences SET preference = {value} WHERE id = {pref_id}")
             con.commit()
 
-        people = pd.read_sql(con=con, sql = f"SELECT * FROM people")
+        people = pd.read_sql(con=con, sql = f"SELECT * FROM people WHERE active")
         people = people.rename(columns = {'id': 'person_id'})
         prefs = pd.read_sql(con=con, sql = f"SELECT * FROM preferences")
         prefs = prefs.merge(people[['person_id','first_name']], on = 'person_id')
@@ -375,14 +351,13 @@ def display_assignment(monday):
         assign_timed = pd.read_sql(con=con, sql="SELECT * FROM assignments_timed").query(f'week_start_date == "{monday}"')
         hours = pd.read_sql(con=con, sql="SELECT * FROM hours").query(f'week_start_date == "{monday}"').set_index('person_id')
 
-    people['hours'] = hours.target_hours - hours.leftover_hours
     # construct the dict of assignments with names as keys
     people_ids = pd.concat((assign.person_id, assign_timed.person_id)).unique()
     chores = {}
-    hours = {} # total number of hours
+    hours_by_name = {}
     for person_id in people_ids:
         person_name = people.loc[person_id, 'first_name']
-        hours[person_name] = people.loc[person_id, 'hours']
+        hours_by_name[person_name] = hours.loc[person_id, 'hours_worked']
         rows = []
         for _, chore in assign_timed.query(f'person_id == {person_id}').sort_values('weekday').iterrows():
             task = daily.loc[chore.task_id]
@@ -400,7 +375,7 @@ def display_assignment(monday):
                 'weekday': ''
             })
         chores[person_name] = pd.DataFrame(rows)
-    return render_template("assignment.html", monday=monday, chores=chores, hours=hours)
+    return render_template("assignment.html", monday=monday, chores=chores, hours=hours_by_name)
 
 @app.route("/make_gsheet/<monday>")
 def make_gsheet(monday):

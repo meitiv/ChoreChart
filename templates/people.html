@@ -7,12 +7,13 @@
 <body>
   <h2><a href="/">Homepage</a></h2>
   <h2><a href="/tasks">Chores</a></h2>
-  <h2>Maitri Folk</h2>
+  <h2>Members of the household</h2>
   <table>
     <tr>
       <th>Name</th>
       <th>Parent</th>
       <th>Load (0-1)</th>
+      <th>Active</th>
     </tr>
     {% for person in people.itertuples() %}
     <tr>
@@ -26,20 +27,19 @@
 	  <input type="text" name="frac" size="4" value="{{ person.load_fraction }}"/>
 	</td>
 	<td>
+	  <input type="checkbox" name="active" {{"checked" if person.active else ""}}/>
+	</td>
+	<td>
 	  <button type="sumbit">Update</button>
 	</td>
       </form>
-      <form method="POST" action="{{ url_for('delete_person') }}">
-	<td>
-	  <input type="hidden" name="id" value="{{ person.id }}"></input> 
-	  <button type="sumbit">Delete</button>
-	</td>
-      </form>
-      <form method="GET" action="{{ url_for('requests', person_id = person.id) }}">
-	<td>
+      <td>
+	{% if person.active %}
+	<form method="GET" action="{{ url_for('requests', person_id = person.id) }}">
 	  <button type="sumbit">Edit Weekly Chore Requests</button>
-	</td>
-      </form>
+	</form>
+	{% endif %}
+      </td>
     </tr>
     {% endfor %}
   </table>
@@ -62,6 +62,11 @@
       <tr>
 	<td><label for="parent">Parent:</label></td>
 	<td><input type="checkbox" id="parent" name="parent"></input></td>
+      </tr>
+      <tr>
+	<td><label for="email">Email:</label></td>
+	<td><input type="text" id="email" name="email"></input></td>
+      </tr>
       <tr>
 	<td colspan="2" class="center-text">
 	  <input type="submit" value="Add Person">

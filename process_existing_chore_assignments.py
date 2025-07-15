@@ -188,10 +188,10 @@ class ChoreChartReader:
                 prev_task_name = row[0]
                 task_type, task_id = self.match_task(chore_name)
                 person_id = self.match_person(row[2])
-                if task_id is None or person_id is None:
-                    continue
+                if task_id is None or person_id is None: continue
                 if task_type == 'daily':
                     weekday = get_weekday(row[0])
+                    if weekday is None: continue
                     self.cur.execute(
                         f"""INSERT INTO assignments_timed VALUES
                         ('{date}', {person_id}, {weekday}, {task_id})"""
