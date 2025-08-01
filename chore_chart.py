@@ -305,7 +305,7 @@ def requests(person_id):
             )
             con.commit()
         # get the requests original or modified
-        requests = pd.read_sql(
+        requests_df = pd.read_sql(
             con = con,
             sql = f"""SELECT * FROM requests
             WHERE person_id = {person_id} AND
@@ -313,16 +313,21 @@ def requests(person_id):
         )
         # if requests are empty (either because the person does not
         # exist, or the date does not exist, add a row with all 0's
-        if requests.empty:
-            requests.loc[0] = [date_week_starts, 0, 0, 0, 0, 0, 0, 0, 0]
+        if requests_df.empty:
+            requests_df.loc[0] = [date_week_starts, 0, 0, 0, 0, 0, 0, 0, 0]
 
         # make bit lists from each integer attribute
-        for col in requests.columns:
+        for col in requests_df.columns:
             if "id" in col or "date" in col: continue
-            requests[col] = requests[col].apply(int_to_bits)
-        requests = requests.squeeze()
-        return render_template("requests.html", person = person,
-                               date = date_week_starts, requests = requests)
+            requests_df[col] = requests_df[col].apply(int_to_bits)
+        requests_ser = requests_df.squeeze()
+        if "form_submit" in request.form:
+            return redirect(url_for("people"))
+        else:
+            return render_template("requests.html",
+                                   person = person,
+                                   date = date_week_starts,
+                                   requests = requests_ser)
 
 @app.route("/assignments")
 def current_assignment():
