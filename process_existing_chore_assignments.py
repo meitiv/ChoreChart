@@ -46,15 +46,17 @@ def process_task_name(task_name, duplicate: bool):
     # Maitri database
     if 'am' in task_name:
         task_name = 'Unload Dishes AM'
-    if 'pm' in task_name:
+    elif 'pm' in task_name:
         task_name = 'Unload Dishes PM'
-    if 'night swee' in task_name.lower():
+    elif 'Unload Dishes' in task_name:
+        task_name = 'Unload Dishes PM'
+    elif 'night swee' in task_name.lower():
         task_name = 'Night Cleanup'
-    if 'House Meal' in task_name:
+    elif 'House Meal' in task_name:
         task_name = 'House Meal'
-    if 'sous' in task_name.lower():
+    elif 'sous' in task_name.lower():
         task_name = 'Sous Chef for House Meal'
-    if 'Meal Cleanup' in task_name:
+    elif 'Meal Cleanup' in task_name:
         if duplicate:
             task_name = 'Meal Cleanup Helper'
         else:
