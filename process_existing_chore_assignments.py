@@ -18,6 +18,7 @@ task_name_map = {
     'Maintain pressure cooker': 'Maintain Pressure Cooker',
     'Clean Mini-Split filters': 'Clean Mini-Split Filters',
     'Kitchen Hood Filters': 'Clean Kitchen Hood Filters',
+    'Sous chef': 'Sous Chef for House Meal'
 }
 
 def process_date(date_str, year):
@@ -91,7 +92,7 @@ class ChoreChartReader:
     def connect_sheet(self):
         gc = pygsheets.authorize(service_file=service_file)
         self.sheets = gc.open(f'CSS {self.year}').worksheets()
-        
+
     def match_person(self, first_name):
         if first_name not in self.people.index:
             return
@@ -154,14 +155,19 @@ class ChoreChartReader:
                 print('Skipping', sheet.title)
                 continue
             print('Processing', date, 'chores')
+            # get the row that says "Total" in col B
+            for row in range(95,99):
+                if sheet.get_value(f'B{row}').strip() == "Total":
+                     break
+            total_row = row
             chores = sheet.get_as_df(
                 has_header = False,
                 start = 'C3',
-                end = 'E89'
+                end = f'E{total_row - 6}'
             )
             # get the hours and days in town
-            hours = self.process_hours(sheet.get_value('B98'))
-            days_in_town = self.process_intown(sheet.get_value('B96'))
+            hours = self.process_hours(sheet.get_value(f'B{total_row + 3}'))
+            days_in_town = self.process_intown(sheet.get_value(f'B{total_row + 1}'))
 
             # propagate chore names
             chores[0] = propagate_value(chores[0])
