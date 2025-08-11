@@ -50,7 +50,7 @@ def update_person():
             active = {active}
             WHERE id = {person_id}"""
         )
-        con.commit()            
+        con.commit()
     return redirect(url_for("people"))
 
 @app.route("/add_person", methods=["POST"])
