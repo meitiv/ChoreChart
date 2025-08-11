@@ -29,7 +29,7 @@
     {% endfor %}
     <tr>
       <td>Total hours:</td>
-      <td>{{hours[name]}}</td>
+      <td>{{person_chores.duration_hours.sum()}}</td>
     </tr>
   </table>
   {% endfor %}

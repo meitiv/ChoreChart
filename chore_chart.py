@@ -354,15 +354,11 @@ def display_assignment(monday):
         occasional = pd.read_sql(con=con, sql="SELECT * FROM occasional_tasks").set_index('id')
         assign = pd.read_sql(con=con, sql="SELECT * FROM assignments").query(f'week_start_date == "{monday}"')
         assign_timed = pd.read_sql(con=con, sql="SELECT * FROM assignments_timed").query(f'week_start_date == "{monday}"')
-        hours = pd.read_sql(con=con, sql="SELECT * FROM hours").query(f'week_start_date == "{monday}"').set_index('person_id')
-
     # construct the dict of assignments with names as keys
     people_ids = pd.concat((assign.person_id, assign_timed.person_id)).unique()
     chores = {}
-    hours_by_name = {}
     for person_id in people_ids:
         person_name = people.loc[person_id, 'first_name']
-        hours_by_name[person_name] = hours.loc[person_id, 'hours_worked']
         rows = []
         for _, chore in assign_timed.query(f'person_id == {person_id}').sort_values('weekday').iterrows():
             task = daily.loc[chore.task_id]
@@ -380,7 +376,7 @@ def display_assignment(monday):
                 'weekday': ''
             })
         chores[person_name] = pd.DataFrame(rows)
-    return render_template("assignment.html", monday=monday, chores=chores, hours=hours_by_name)
+    return render_template("assignment.html", monday=monday, chores=chores)
 
 @app.route("/make_gsheet/<monday>")
 def make_gsheet(monday):
