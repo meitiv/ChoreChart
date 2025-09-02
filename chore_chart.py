@@ -67,7 +67,7 @@ def add_person():
         cursor.execute(
             f"""INSERT INTO people
             VALUES ('{person_id}', '{first_name}', '{last_name}',
-            {frac}, {parent}, 1, {email})"""
+            {frac}, {parent}, 1, '{email}')"""
         )
         con.commit()
         # create default chore preferences for this person
