@@ -200,7 +200,7 @@ def delete_seasonal_task():
         )
         cursor.execute(
             f"""DELETE FROM preferences
-            WHERE task_type = "seasonal" AND task = {task_name}"""
+            WHERE task_type = "seasonal" AND task = "{task_name}" """
         )
         con.commit()
     return redirect(url_for("tasks"))
@@ -369,6 +369,7 @@ def display_assignment(monday):
                 'weekday': ts.strftime("%A")
             })
         for _, chore in assign.query(f'person_id == {person_id}').iterrows():
+            print(chore)
             task = eval(f'{chore.task_type}.loc[{chore.task_id}]')
             rows.append({
                 'task': task.task,

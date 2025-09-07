@@ -134,9 +134,9 @@ class ChoreChartReader:
         # this is the reduction factor that will assure that nobody's
         # total is greater than the max_weekly_person_hours configures in
         # param.py
-        reduction_factor = max_weekly_person_hours/target_per_person_hours
-        # if the factor is 1 or greater, don't need to do anything
-        people_copy['chore_hours'] *= reduction_factor if reduction_factor < 1 else 1
+        people_copy['chore_hours'] = people_copy.chore_hours.apply(
+            lambda h: min(h, max_weekly_person_hours)
+        )
         return people_copy.chore_hours.fillna(0)
 
     def match_task(self, task_name):

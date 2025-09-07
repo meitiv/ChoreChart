@@ -128,9 +128,13 @@ def assign_chores():
             else row.end_date + timedelta(days = 365),
             axis = 1
         )
-        # get last week's hourly deficit
-        deficit = pd.read_sql(con=con, sql=f"""SELECT person_id, leftover_hours FROM hours
-        WHERE week_start_date = '{this_monday}'""").set_index('person_id').squeeze()
+        # get last available leftover hours
+        hours = pd.read_sql(con = con, sql = f"SELECT * FROM hours")
+        hours = hours[hours.week_start_date != str(monday)]
+        deficit = hours.groupby('person_id').apply(
+            lambda df: df.sort_values('week_start_date').iloc[-1].leftover_hours,
+            include_groups = False
+        )
 
     # get availability for various tasks
     requests = requests.query(f'week_start_date == "{monday}"').set_index('person_id')
@@ -260,7 +264,7 @@ def assign_chores():
 
     # the rest of the tasks are assigned by availability and
     # preference
-    for task_id, task in weekly.iterrows():
+    for _, task in weekly.iterrows():
         print('Assigning', task.task)
         intown_avail = merge_prefs(intown, preferences, task.task)
         intown_avail['enough_hours'] = people.chore_hours >= task.duration_hours
@@ -271,7 +275,7 @@ def assign_chores():
             print("Not enough hours for weekly task: " + task.task)
             continue
         person_id = int(intown_avail.iloc[0].name)
-        weekly_chores[person_id].append(int(task_id))
+        weekly_chores[person_id].append(int(task.id))
         people.loc[person_id, 'chore_hours'] -= task.duration_hours
     
     # assign AM/PM dishwasher emptying
@@ -323,7 +327,7 @@ def assign_chores():
     seasonal = seasonal[seasonal.urgency > 0]
     # seasonal assignments
     seasonal_chores = defaultdict(list)
-    for task_id, task in seasonal.sort_values('urgency', ascending = False).iterrows():
+    for _, task in seasonal.sort_values('urgency', ascending = False).iterrows():
         if monday > task.end_date.date() or monday < task.start_date.date():
             print('Skipping seasonal', task.task, ': out of season')
             continue
@@ -337,7 +341,7 @@ def assign_chores():
             print("Not enough hours for seasonal task: " + task.task)
             continue
         person_id = int(intown_avail.iloc[0].name)
-        seasonal_chores[person_id].append(int(task_id))
+        seasonal_chores[person_id].append(int(task.id))
         people.loc[person_id, 'chore_hours'] -= task.duration_hours
 
     # add the urgency column to the occasional task definitions
@@ -354,7 +358,7 @@ def assign_chores():
     occasional = occasional[occasional.urgency > 0]
     # occasional assignments
     occasional_chores = defaultdict(list)
-    for task_id, task in occasional.sort_values('urgency', ascending = False).iterrows():
+    for _, task in occasional.sort_values('urgency', ascending = False).iterrows():
         print('Assigning', task.task)
         intown_avail = merge_prefs(intown, preferences, task.task)
         intown_avail['enough_hours'] = people.chore_hours >= task.duration_hours
@@ -365,7 +369,7 @@ def assign_chores():
             print("Not enough hours for occasional task: " + task.task)
             continue
         person_id = int(intown_avail.iloc[0].name)
-        occasional_chores[person_id].append(int(task_id))
+        occasional_chores[person_id].append(int(task.id))
         people.loc[person_id, 'chore_hours'] -= task.duration_hours
 
     # create the assignments dataframe with week_start_date,person_id,task_type,chore_id columns

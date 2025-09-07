@@ -53,7 +53,7 @@ class GsheetConstructor:
         for sheet in wbk.worksheets():
             if sheet.title == self.monday:
                 wbk.del_worksheet(sheet)
-        self.sheet = wbk.add_worksheet(self.monday)
+        self.sheet = wbk.add_worksheet(self.monday, index = 0)
 
     def add_header(self):
         # add the header
