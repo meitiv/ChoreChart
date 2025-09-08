@@ -369,7 +369,6 @@ def display_assignment(monday):
                 'weekday': ts.strftime("%A")
             })
         for _, chore in assign.query(f'person_id == {person_id}').iterrows():
-            print(chore)
             task = eval(f'{chore.task_type}.loc[{chore.task_id}]')
             rows.append({
                 'task': task.task,
