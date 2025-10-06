@@ -9,6 +9,7 @@ import re
 import sys
 from collections import defaultdict
 from datetime import timedelta, datetime
+import yaml
 
 def get_max_gap(days: List[int]) -> int:
     # calculate the largest circular gap between days
@@ -107,10 +108,18 @@ def calc_target_hours(people, days_in_town, deficit):
     target_hours = target_hours[target_hours > 0]
     return target_hours
 
+def assign_chore_to_person(people, person_name, tasks, task_name, assignments):
+    person_id = people[people.first_name == person_name].squeeze().name
+    task = tasks[tasks.task == task_name].squeeze()
+    assignments[person_id].append(task.id)
+    tasks = tasks[tasks.id != task.id]
+    people.loc[person_id, 'chore_hours'] -= task.duration_hours
+    return assignments, tasks, people
+
 def assign_chores():
     # read the data
     with sqlite3.connect(db) as con:
-        people = get_table(con, "people").set_index('id')
+        people = get_table(con, "people").query("active == 1").set_index('id')
         requests = get_table(con, "requests")
         preferences = get_table(con, "preferences")
         daily = get_table(con, "daily_tasks")
@@ -135,6 +144,9 @@ def assign_chores():
             lambda df: df.sort_values('week_start_date').iloc[-1].leftover_hours,
             include_groups = False
         )
+
+    # read the fixed chore assignments
+    fixed_chores_config = yaml.safe_load(open('fixed_chores.yaml', 'r'))
 
     # get availability for various tasks
     requests = requests.query(f'week_start_date == "{monday}"').set_index('person_id')
@@ -163,6 +175,7 @@ def assign_chores():
     dishes_am_task = daily.query('task == "Unload Dishes AM"').squeeze()
     dishes_pm_task = daily.query('task == "Unload Dishes PM"').squeeze()
 
+    # assign meals
     cook = defaultdict(list)
     max_gap = 7
     for person_id, row in meal.iterrows():
@@ -249,6 +262,14 @@ def assign_chores():
     # probabilities proportional to the preference
     weekly_chores = defaultdict(list) # keys are person_id, values are
                                       # lists of weekly task_ids
+
+    # assign fixed chores
+    for asnmgt in fixed_chores_config.get('weekly'):
+        weekly_chores, weekly, people = assign_chore_to_person(
+            people, asnmgt['person'], weekly, asnmgt['chore'], weekly_chores
+        )
+
+    # Main bathroom needs to rotate
     task = weekly.query('task == "Bathrm, Main"').squeeze()
     intown_avail = merge_prefs(intown, preferences, 'Bathrm, Main')
     # add a column with boolean enough hours
@@ -327,6 +348,13 @@ def assign_chores():
     seasonal = seasonal[seasonal.urgency > 0]
     # seasonal assignments
     seasonal_chores = defaultdict(list)
+    # assign fixed chores
+    if 'seasonal' in fixed_chores_config:
+        for asnmgt in fixed_chores_config['seasonal']:
+            seasonal_chores, seasonal, people = assign_chore_to_person(
+                people, asnmgt['person'], seasonal, asnmgt['chore'], seasonal_chores
+            )
+
     for _, task in seasonal.sort_values('urgency', ascending = False).iterrows():
         if monday > task.end_date.date() or monday < task.start_date.date():
             print('Skipping seasonal', task.task, ': out of season')
@@ -358,6 +386,14 @@ def assign_chores():
     occasional = occasional[occasional.urgency > 0]
     # occasional assignments
     occasional_chores = defaultdict(list)
+
+    # assign fixed chores
+    if 'occasional' in fixed_chores_config:
+        for asnmgt in fixed_chores_config['occasional']:
+            occasional_chores, occasional, people = assign_chore_to_person(
+                people, asnmgt['person'], occasional, asnmgt['chore'], occasional_chores
+            )
+
     for _, task in occasional.sort_values('urgency', ascending = False).iterrows():
         print('Assigning', task.task)
         intown_avail = merge_prefs(intown, preferences, task.task)

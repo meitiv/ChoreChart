@@ -1,0 +1,13 @@
+weekly:
+  - chore: Manage CSS Schedule
+    person: Sasha
+  - chore: Administrative Assist
+    person: Ryan
+  - chore: Bathrm, Basemnt S
+    person: Emily
+  - chore: Bathrm, 2nd Fl Main
+    person: Sasha
+# add an occasional or seasonal section with the same structure as
+# above to have a fixed assignment for those types of chores, the
+# chore name has to match the name exactly, no extra spaces or
+# different punctuation is allowed

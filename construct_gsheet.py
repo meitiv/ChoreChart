@@ -45,7 +45,7 @@ class GsheetConstructor:
         # merge people's first name
         self.chores = self.chores.merge(self.people[['person_id', 'first_name']], on = 'person_id')
         self.chores_timed = self.chores_timed.merge(self.people[['person_id', 'first_name']], on = 'person_id')
-        self.hours = self.hours.merge(self.people[['person_id', 'first_name']], on = 'person_id')
+        self.hours = self.hours.merge(self.people[['person_id', 'first_name', 'parent']], on = 'person_id')
 
     def create_sheet(self):
         wbk = self.gc.open_by_key(gsheet_key)
@@ -68,7 +68,12 @@ class GsheetConstructor:
         self.current_row = 4
         rows = [['Name', 'Days in town', 'Hours', 'Accept']]
         for _, row in self.hours.query('hours_worked > 0').iterrows():
-            rows.append([row.first_name, f'{round(row.days_in_town)}d', f'{row.hours_worked} hrs', '☐'])
+            name = row.first_name
+            hours_worked = row.hours_worked
+            if row.parent == 1:
+                name += f' (parental credit of {parent_credit_hours} hour)'
+                hours_worked += parent_credit_hours
+            rows.append([name, f'{round(row.days_in_town)}d', f'{hours_worked} hrs', '☐'])
             self.current_row += 1
         self.sheet.update_values('B3', rows)
         self.separator_rows.append(self.current_row)
@@ -150,8 +155,9 @@ class GsheetConstructor:
         chores = self.chores_timed.query('category == "Meal Cleanup"')
         for day in range(7):
             for _, chore in chores.query(f'weekday == {day}').iterrows():
+                task_name = chore.task.replace('Helper', '').replace('Lead', '')
                 self.sheet.update_value(
-                    f'C{self.current_row}', f'{chore.task} {self.get_day_name(day)}'
+                    f'C{self.current_row}', f'{task_name} {self.get_day_name(day)}'
                 )
                 self.sheet.cell(f'C{self.current_row}').set_text_format('bold', True)
                 self.fill_chore_info(chore)
@@ -195,8 +201,13 @@ class GsheetConstructor:
         for col_idx, width in gsheet_column_widths.items():
             self.sheet.adjust_column_width(col_idx, pixel_size = width)
 
+    def change_font_size(self, size = 12):
+        all_cells = self.sheet.range(f'A1:F{self.current_row}')
+        for cell in all_cells:
+            if c.value:
+                cell.text_format['fontSize'] = size
+
     def main(self):
-        sleep_sec = 30
         self.load_data()
         self.create_sheet()
         self.add_header()
@@ -214,6 +225,7 @@ class GsheetConstructor:
         self.add_category_chores("Support Roles")
         self.draw_separators()
         self.adjust_column_widths()
+        #self.change_font_size()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
