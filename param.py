@@ -1,5 +1,5 @@
 parent_credit_hours = 1
-target_weekly_hours = 35
+target_weekly_hours = 40
 max_weekly_person_hours = 5
 sleep_sec = 5
 service_file = 'secret/maitrichorechart-339d26170a7c.json'

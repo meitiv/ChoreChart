@@ -12,6 +12,8 @@ import assign_chores
 import construct_gsheet
 import multiprocessing
 from construct_gsheet import GsheetConstructor
+import yaml
+from collections import defaultdict
 
 app = Flask(__name__)
 app.secret_key = 'compassionatecommunication'
@@ -29,9 +31,14 @@ def landing_page():
 
 @app.route("/people")
 def people():
+    today = date.today()
+    this_monday = today - timedelta(days = today.weekday())
+    next_monday = this_monday + timedelta(days = 7)
     with sqlite3.connect(db) as con:
         people = pd.read_sql(con=con, sql="SELECT * FROM people")
-    return render_template("people.html", people = people)
+    return render_template("people.html", people = people,
+                           this_monday = this_monday,
+                           next_monday = next_monday)
 
 @app.route("/update_person", methods=["POST"])
 def update_person():
@@ -223,13 +230,10 @@ def prefs():
 
     return render_template("prefs.html", prefs = prefs)
 
-@app.route("/requests/<int:person_id>", methods=["GET", "POST"])
-def requests(person_id):
+@app.route("/requests/<int:person_id>/<monday>", methods=["POST", "GET"])
+def requests(person_id, monday):
+    date_week_starts = pd.to_datetime(monday).date()
     with sqlite3.connect(db) as con:
-        # get the date of the monday, the following week
-        today = date.today()
-        days_to_add = 7 - today.weekday()
-        date_week_starts = today + timedelta(days = days_to_add)
 
         # get the person
         person = pd.read_sql(con=con, sql=f"SELECT * FROM people WHERE id = {person_id}").squeeze()
@@ -326,7 +330,7 @@ def requests(person_id):
         else:
             return render_template("requests.html",
                                    person = person,
-                                   date = date_week_starts,
+                                   monday = date_week_starts,
                                    requests = requests_ser)
 
 @app.route("/assignments")
@@ -339,10 +343,19 @@ def current_assignment():
     return render_template("assignments.html",
                            mondays=mondays[::-1])
 
-@app.route("/assign-chores")
-def make_chore_chart():
-    monday = assign_chores.assign_chores()
-    return redirect(url_for("display_assignment", monday = monday))
+@app.route("/chores")
+def chores():
+    # get this week's and next week's mondays and render the page
+    # which lets you chose which week to recompute
+    today = date.today()
+    this_monday = today - timedelta(days = today.weekday())
+    next_monday = this_monday + timedelta(days = 7)
+    return render_template("assign_chores.html", mondays = (this_monday, next_monday))
+
+@app.route("/assign-chores/<monday>")
+def make_chore_chart(monday):
+    assign_chores.assign_chores(pd.to_datetime(monday).date())
+    return redirect(url_for('display_assignment', monday = monday))
 
 @app.route("/assignment/<monday>")
 def display_assignment(monday):
@@ -354,6 +367,16 @@ def display_assignment(monday):
         occasional = pd.read_sql(con=con, sql="SELECT * FROM occasional_tasks").set_index('id')
         assign = pd.read_sql(con=con, sql="SELECT * FROM assignments").query(f'week_start_date == "{monday}"')
         assign_timed = pd.read_sql(con=con, sql="SELECT * FROM assignments_timed").query(f'week_start_date == "{monday}"')
+    # fixed chores
+    fixed_chores = yaml.safe_load(open('fixed_chores.yaml'))
+    custom_duration = defaultdict(dict) # keys are the first names,
+                                        # values are dictionaries with
+                                        # task names as keys
+    for task_type, assignments in fixed_chores.items():
+        for assnmt in assignments:
+            if 'credit' in assnmt:
+                custom_duration[assnmt['person']][assnmt['chore']] = assnmt['credit']
+    
     # construct the dict of assignments with names as keys
     people_ids = pd.concat((assign.person_id, assign_timed.person_id)).unique()
     chores = {}
@@ -370,9 +393,14 @@ def display_assignment(monday):
             })
         for _, chore in assign.query(f'person_id == {person_id}').iterrows():
             task = eval(f'{chore.task_type}.loc[{chore.task_id}]')
+            # see if there is a custom duration
+            if person_name in custom_duration and task.task in custom_duration[person_name]:
+                duration = custom_duration[person_name][task.task]
+            else:
+                duration = task.duration_hours
             rows.append({
                 'task': task.task,
-                'duration_hours': task.duration_hours,
+                'duration_hours': duration,
                 'weekday': ''
             })
         chores[person_name] = pd.DataFrame(rows)

@@ -8,7 +8,7 @@ from typing import List
 import re
 import sys
 from collections import defaultdict
-from datetime import timedelta, datetime
+from datetime import date, timedelta, datetime
 import yaml
 
 def get_max_gap(days: List[int]) -> int:
@@ -34,8 +34,8 @@ def get_table(con, table, parse_dates = None):
                        parse_dates=parse_dates)
 
 def get_people_and_days(values):
-    # returns a pd.Series with person_id as index and days as values
-    # column argument is the name of the requests column to use
+    # returns a pd.Series with person_id as index and days lists as
+    # values
     day = values.apply(get_weekdays).rename('day')
     num_days = day.apply(len).rename('num_days')
     return pd.concat(
@@ -43,15 +43,20 @@ def get_people_and_days(values):
         axis = 1
     ).sort_values('num_days').query('num_days > 0')
 
-def merge_prefs(avail_df, pref_df, task_name):
+def merge_prefs(people, avail_df, pref_df, task_name):
     return avail_df.merge(
         pref_df[pref_df.task == task_name][["person_id", "preference"]],
         left_index = True,
         right_on = "person_id",
         how = "left"
+    ).merge(
+        people[["chore_hours"]],
+        right_index = True,
+        left_on = "person_id",
+        how = "left"
     ).sort_values(
-        ["preference", "num_days"], ascending = [False, True]
-    ).set_index('person_id')
+        ["preference", "chore_hours"], ascending = False
+    ).set_index("person_id")
 
 def append_timed_rows(assign_dict, task_id, monday, rows):
     for person_id, days in assign_dict.items():
@@ -103,20 +108,30 @@ def calc_target_hours(people, days_in_town, deficit):
     fraction = (people.load_fraction*days_in_town/7).fillna(0)
     per_person_target = target_weekly_hours/fraction.sum()
     target_hours = (per_person_target*fraction).add(deficit, fill_value = 0)
-    target_hours *= max_weekly_person_hours/target_hours.max()
+    target_hours = target_hours.apply(
+        lambda h: min(h, max_weekly_person_hours)
+    )
     target_hours = target_hours - people.parent*parent_credit_hours
     target_hours = target_hours[target_hours > 0]
     return target_hours
 
-def assign_chore_to_person(people, person_name, tasks, task_name, assignments):
+def assign_chore_to_person(people, assgmt, tasks, assignments):
+    person_name = assgmt['person']
+    task_name = assgmt['chore']
     person_id = people[people.first_name == person_name].squeeze().name
     task = tasks[tasks.task == task_name].squeeze()
-    assignments[person_id].append(task.id)
-    tasks = tasks[tasks.id != task.id]
-    people.loc[person_id, 'chore_hours'] -= task.duration_hours
-    return assignments, tasks, people
+    duration = assgmt.get('credit') or task.duration_hours
+    # make sure there are enough hours
+    if people.loc[person_id, 'chore_hours'] < duration - 0.1:
+        print('Cant assign', task.task, 'to', person_name)
+        return assignments, tasks, people, False
+    else:
+        assignments[person_id].append(task.id)
+        tasks = tasks[tasks.id != task.id]
+        people.loc[person_id, 'chore_hours'] -= duration
+        return assignments, tasks, people, True
 
-def assign_chores():
+def assign_chores(monday: date):
     # read the data
     with sqlite3.connect(db) as con:
         people = get_table(con, "people").query("active == 1").set_index('id')
@@ -126,9 +141,6 @@ def assign_chores():
         weekly = get_table(con, "weekly_tasks")
         occasional = get_table(con, "occasional_tasks")
         seasonal = get_table(con, "seasonal_tasks")
-        today = datetime.today().date()
-        monday = today + timedelta(days = 7 - today.weekday())
-        this_monday = monday - timedelta(days = 7)
         year = monday.year 
         seasonal['start_date'] = pd.to_datetime(seasonal.start_date + f"/{year}")
         seasonal['end_date'] = pd.to_datetime(seasonal.end_date + f"/{year}")
@@ -152,6 +164,7 @@ def assign_chores():
     requests = requests.query(f'week_start_date == "{monday}"').set_index('person_id')
     intown = get_people_and_days(requests.days_in_town)
     meal = get_people_and_days(requests.cook_meal)
+    sous = get_people_and_days(requests.sous_chef)
     clean = get_people_and_days(requests.meal_cleanup)
     sweep = get_people_and_days(requests.night_sweep)
     dishes_am = get_people_and_days(requests.dishes_am)
@@ -169,6 +182,7 @@ def assign_chores():
 
     # get the task data
     meal_task = daily.query('task == "House Meal"').squeeze()
+    sous_task = daily.query('task == "Sous Chef for House Meal"').squeeze()
     clean_lead_task = daily.query('task == "Meal Cleanup Lead"').squeeze()
     clean_help_task = daily.query('task == "Meal Cleanup Helper"').squeeze()
     night_sweep_task = daily.query('task == "Night Cleanup"').squeeze()
@@ -177,10 +191,11 @@ def assign_chores():
 
     # assign meals
     cook = defaultdict(list)
+    souschef = defaultdict(list)
     max_gap = 7
     for person_id, row in meal.iterrows():
         # make sure the cook has enough remaining hours
-        if people.loc[person_id, 'chore_hours'] < meal_task.duration_hours:
+        if people.loc[person_id, 'chore_hours'] <= meal_task.duration_hours:
             continue
 
         for day in row.day:
@@ -202,15 +217,32 @@ def assign_chores():
                 best_day = day
 
         cook[person_id].append(best_day)
-        # subtract 2.5h from chore_hours for this cook
+        # if a sous chef is available on this day, use the first one found
+        sous_person = None
+        for sous_id, row in sous.iterrows():
+            if best_day in row.day and \
+               people.loc[sous_id, 'chore_hours'] <= sous_task.duration_hours:
+                sous_person = sous_id
+                sous = sous[sous.index != sous_id]
+                break
+
+        # subtract 2.5h from chore_hours for the cook
         people.loc[person_id, 'chore_hours'] -= meal_task.duration_hours
+        # if there is a sous chef, adjust
+        if sous_person is not None:
+            souschef[sous_person].append(best_day)
+            people.loc[person_id, 'chore_hours'] += sous_task.duration_hours
+            people.loc[sous_person, 'chore_hours'] -= sous_task.duration_hours
 
     # assign clean lead
-    clean_pref = merge_prefs(clean, preferences, "Meal Cleanup Lead")
+    clean_pref = merge_prefs(people, clean, preferences, "Meal Cleanup Lead")
     clean_lead = defaultdict(list)
     clean_days = sum(cook.values(), [])
     for person_id, row in clean_pref.iterrows():
         if not clean_days: break
+        # make sure this person is not a cook
+        if person_id in cook.keys():
+            continue
         for day in clean_days:
             if day in row.day:
                 # make sure there is enough hours
@@ -222,11 +254,15 @@ def assign_chores():
                 people.loc[person_id, 'chore_hours'] -= clean_lead_task.duration_hours
 
     # assing clean_help
-    clean_pref = merge_prefs(clean, preferences, "Meal Cleanup Helper")
+    clean_pref = merge_prefs(people, clean, preferences, "Meal Cleanup Helper")
     clean_help = defaultdict(list)
     clean_days = sum(cook.values(), [])
+    sweep_days = [d for d in range(7) if d not in clean_days]
     for person_id, row in clean_pref.iterrows():
         if not clean_days: break
+        # make sure this person is not a cook
+        if person_id in cook.keys():
+            continue
         for day in clean_days:
             # make sure this person is not the lead
             if day in clean_lead.get(person_id, []):
@@ -241,12 +277,13 @@ def assign_chores():
                 people.loc[person_id, 'chore_hours'] -= clean_help_task.duration_hours
 
     # assign night sweep to all days that do not have a meal
-    clean_days = sum(cook.values(), [])
-    sweep_days = [d for d in range(7) if d not in clean_days]
-    clean_pref = merge_prefs(clean, preferences, "Night Cleanup")
+    clean_pref = merge_prefs(people, clean, preferences, "Night Cleanup")
     sweep = defaultdict(list)
     for person_id, row in clean_pref.iterrows():
         if not sweep_days: break
+        # make sure this person is not a cook
+        if person_id in cook.keys():
+            continue
         for day in sweep_days:
             if day in row.day:
                 # make sure there is enough hours
@@ -264,14 +301,20 @@ def assign_chores():
                                       # lists of weekly task_ids
 
     # assign fixed chores
+    fixed_tasks = []
     for asnmgt in fixed_chores_config.get('weekly'):
-        weekly_chores, weekly, people = assign_chore_to_person(
-            people, asnmgt['person'], weekly, asnmgt['chore'], weekly_chores
+        weekly_chores, weekly, people, done = assign_chore_to_person(
+            people, asnmgt, weekly, weekly_chores
         )
+        if done:
+            fixed_tasks.append(asnmgt['chore'])
+
+    print(fixed_tasks, 'assigned')
+    weekly = weekly[~weekly.task.isin(fixed_tasks)]
 
     # Main bathroom needs to rotate
     task = weekly.query('task == "Bathrm, Main"').squeeze()
-    intown_avail = merge_prefs(intown, preferences, 'Bathrm, Main')
+    intown_avail = merge_prefs(people, intown, preferences, 'Bathrm, Main')
     # add a column with boolean enough hours
     intown_avail['enough_hours'] = people.chore_hours >= task.duration_hours
     intown_avail = intown_avail.query(
@@ -279,29 +322,46 @@ def assign_chores():
     ).copy()
     intown_avail['prob'] = intown_avail.preference/intown_avail.preference.sum()
     person_id = int(intown_avail.sample(weights = 'prob').squeeze().name)
-    weekly_chores[person_id].append(int(task.name))
+    weekly_chores[person_id].append(int(task.id))
+    print('Assigning Main Floor Bathroom to', people.loc[person_id, 'first_name'])
     people.loc[person_id, 'chore_hours'] -= task.duration_hours
     weekly = weekly[~(weekly.index == task.name)]
+    print(weekly_chores)
 
     # the rest of the tasks are assigned by availability and
     # preference
+    print(weekly)
     for _, task in weekly.iterrows():
-        print('Assigning', task.task)
-        intown_avail = merge_prefs(intown, preferences, task.task)
+        print('Assigning weekly:', task.task)
+        intown_avail = merge_prefs(people, intown, preferences, task.task)
         intown_avail['enough_hours'] = people.chore_hours >= task.duration_hours
         intown_avail = intown_avail.query(
             'num_days > 0 & enough_hours & preference > 0'
         )
         if intown_avail.empty:
-            print("Not enough hours for weekly task: " + task.task)
+            print(f"Not enough hours for weekly task: {task.task}")
             continue
-        person_id = int(intown_avail.iloc[0].name)
+        # custom logic for "Manage Trash & Recycling": the person has
+        # to be in town 5 or more days including Wednesday and Thursday
+        if task.task == 'Manage Trash & Recycling':
+            print(intown_avail)
+            match = False
+            for person_id, row in intown_avail.iterrows():
+                if 2 in row.day and 3 in row.day and row.num_days > 4:
+                    match = True
+                    break
+            if not match:
+                print(f"Could not find someome to {task.task}")
+                continue
+        else:
+            person_id = int(intown_avail.iloc[0].name)
+        print('Assigned to', person_id)
         weekly_chores[person_id].append(int(task.id))
         people.loc[person_id, 'chore_hours'] -= task.duration_hours
     
     # assign AM/PM dishwasher emptying
     empty_dishes_am = defaultdict(list)
-    am_pref = merge_prefs(dishes_am, preferences, 'Unload Dishes AM')
+    am_pref = merge_prefs(people, dishes_am, preferences, 'Unload Dishes AM')
     for day in range(7):
         for person_id, row in am_pref.iterrows():
             if day not in row.day:
@@ -313,7 +373,7 @@ def assign_chores():
             break
 
     empty_dishes_pm = defaultdict(list)
-    pm_pref = merge_prefs(dishes_pm, preferences, 'Unload Dishes PM')
+    pm_pref = merge_prefs(people, dishes_pm, preferences, 'Unload Dishes PM')
     for day in range(7):
         for person_id, row in pm_pref.iterrows():
             if day not in row.day:
@@ -326,13 +386,15 @@ def assign_chores():
 
     # construct the assignments_timed dataframe with
     # week_start_date,person_id,weekday,task_id columns
-    rows = append_timed_rows(cook, meal_task.name, monday, [])
-    rows = append_timed_rows(clean_lead, clean_lead_task.name, monday, rows)
-    rows = append_timed_rows(clean_help, clean_help_task.name, monday, rows)
-    rows = append_timed_rows(sweep, night_sweep_task.name, monday, rows)
-    rows = append_timed_rows(empty_dishes_am, dishes_am_task.name, monday, rows)
-    rows = append_timed_rows(empty_dishes_pm, dishes_pm_task.name, monday, rows)
+    rows = append_timed_rows(cook, meal_task.id, monday, [])
+    rows = append_timed_rows(souschef, sous_task.id, monday, rows)
+    rows = append_timed_rows(clean_lead, clean_lead_task.id, monday, rows)
+    rows = append_timed_rows(clean_help, clean_help_task.id, monday, rows)
+    rows = append_timed_rows(sweep, night_sweep_task.id, monday, rows)
+    rows = append_timed_rows(empty_dishes_am, dishes_am_task.id, monday, rows)
+    rows = append_timed_rows(empty_dishes_pm, dishes_pm_task.id, monday, rows)
     assignments_timed = pd.DataFrame(rows)
+    print(assignments_timed)
     
     # add the urgency column to the seasonal task definitions
     date_last_performed = pd.read_sql(
@@ -348,19 +410,12 @@ def assign_chores():
     seasonal = seasonal[seasonal.urgency > 0]
     # seasonal assignments
     seasonal_chores = defaultdict(list)
-    # assign fixed chores
-    if 'seasonal' in fixed_chores_config:
-        for asnmgt in fixed_chores_config['seasonal']:
-            seasonal_chores, seasonal, people = assign_chore_to_person(
-                people, asnmgt['person'], seasonal, asnmgt['chore'], seasonal_chores
-            )
-
     for _, task in seasonal.sort_values('urgency', ascending = False).iterrows():
         if monday > task.end_date.date() or monday < task.start_date.date():
             print('Skipping seasonal', task.task, ': out of season')
             continue
-        print('Assigning', task.task)
-        intown_avail = merge_prefs(intown, preferences, task.task)
+        print('Assigning seasonal:', task.task)
+        intown_avail = merge_prefs(people, intown, preferences, task.task)
         intown_avail['enough_hours'] = people.chore_hours >= task.duration_hours
         intown_avail = intown_avail.query(
             'num_days > 0 & enough_hours & preference > 0'
@@ -387,28 +442,32 @@ def assign_chores():
     # occasional assignments
     occasional_chores = defaultdict(list)
 
-    # assign fixed chores
-    if 'occasional' in fixed_chores_config:
-        for asnmgt in fixed_chores_config['occasional']:
-            occasional_chores, occasional, people = assign_chore_to_person(
-                people, asnmgt['person'], occasional, asnmgt['chore'], occasional_chores
-            )
-
     for _, task in occasional.sort_values('urgency', ascending = False).iterrows():
-        print('Assigning', task.task)
-        intown_avail = merge_prefs(intown, preferences, task.task)
-        intown_avail['enough_hours'] = people.chore_hours >= task.duration_hours
-        intown_avail = intown_avail.query(
-            'num_days > 0 & enough_hours & preference > 0'
-        )
-        if intown_avail.empty:
-            print("Not enough hours for occasional task: " + task.task)
-            continue
-        person_id = int(intown_avail.iloc[0].name)
-        occasional_chores[person_id].append(int(task.id))
-        people.loc[person_id, 'chore_hours'] -= task.duration_hours
+        print('Assigning occasional:', task.task)
+        # check if this task has a fixed person assignment
+        done = False
+        if 'occasional' in fixed_chores_config:
+            asnmgt = [a for a in fixed_chores_config['occasional'] if a['chore'] == task.task]
+            if len(asnmgt) == 1:
+                asnmgt = asnmgt[0]
+                occasional_chores, occasional, people, done = assign_chore_to_person(
+                    people, asnmgt, occasional, occasional_chores
+                )
+        if not done:
+            intown_avail = merge_prefs(people, intown, preferences, task.task)
+            intown_avail['enough_hours'] = people.chore_hours >= task.duration_hours
+            intown_avail = intown_avail.query(
+                'num_days > 0 & enough_hours & preference > 0'
+            )
+            if intown_avail.empty:
+                print("Not enough hours for occasional task: " + task.task)
+                continue
+            person_id = int(intown_avail.iloc[0].name)
+            occasional_chores[person_id].append(int(task.id))
+            people.loc[person_id, 'chore_hours'] -= task.duration_hours
 
     # create the assignments dataframe with week_start_date,person_id,task_type,chore_id columns
+    print(weekly_chores)
     rows = append_chore_rows(weekly_chores, 'weekly', monday, [])
     rows = append_chore_rows(seasonal_chores, 'seasonal', monday, rows)
     rows = append_chore_rows(occasional_chores, 'occasional', monday, rows)
@@ -430,5 +489,5 @@ def assign_chores():
         hours_this_week['person_id'] = hours_this_week.index
         hours_this_week.to_sql(con=con, name="hours", index=False, if_exists="append")
 
-    # return the monday of the constructed chore chart
-    return str(monday)
+    # return success
+    return True

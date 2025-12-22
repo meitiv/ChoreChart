@@ -8,6 +8,8 @@ from maitri_db import db
 from datetime import timedelta
 import time
 import argparse
+import yaml
+from collections import defaultdict
 
 class GsheetConstructor:
     def __init__(self, monday):
@@ -46,6 +48,20 @@ class GsheetConstructor:
         self.chores = self.chores.merge(self.people[['person_id', 'first_name']], on = 'person_id')
         self.chores_timed = self.chores_timed.merge(self.people[['person_id', 'first_name']], on = 'person_id')
         self.hours = self.hours.merge(self.people[['person_id', 'first_name', 'parent']], on = 'person_id')
+        # replace the task duration with the custom duration from
+        # fixed_chores.yaml
+        fixed_chores = yaml.safe_load(open('fixed_chores.yaml'))
+        custom_duration = defaultdict(dict) # keys are the first names,
+        # values are dictionaries with
+        # task names as keys
+        for task_type, assignments in fixed_chores.items():
+            for assnmt in assignments:
+                if 'credit' in assnmt:
+                    custom_duration[assnmt['person']][assnmt['chore']] = assnmt['credit']
+        for idx, row in self.chores.iterrows():
+            if row.first_name in custom_duration and \
+               row.task in custom_duration[row.first_name]:
+                self.chores.loc[idx, 'duration_hours'] = custom_duration[row.first_name][row.task]
 
     def create_sheet(self):
         wbk = self.gc.open_by_key(gsheet_key)
@@ -164,9 +180,11 @@ class GsheetConstructor:
         self.separator_rows.append(self.current_row)
 
     def add_dishes(self):
-        self.merge_and_set_text('B', 13, self.daily.query('task == "Unload Dishes AM"').description.unique()[0])
+        num_dishes = self.chores_timed.task.str.contains('Unload Dishes').sum() - 1
+        self.merge_and_set_text('B', num_dishes,
+                                self.daily.query('task == "Unload Dishes AM"').description.unique()[0])
         self.set_description_cell_props()
-        self.merge_and_set_text('A', 13, "Dishes")
+        self.merge_and_set_text('A', num_dishes, "Dishes")
         self.set_category_cell_props()        
         for day in range(7):
             for period in ('AM', 'PM'):
@@ -174,6 +192,7 @@ class GsheetConstructor:
                     (self.chores_timed.weekday == day) &
                     (self.chores_timed.task == f"Unload Dishes {period}")
                 ].squeeze()
+                if chore.empty: continue
                 self.sheet.update_value(
                     f'C{self.current_row}', f'{chore.task} {self.get_day_name(day)}'
                 )

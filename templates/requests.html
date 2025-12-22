@@ -9,10 +9,11 @@
   <h2><a href="{{ url_for('people') }}">Back to managing people</a></h2>
   <h2>Manage Weekly Chore Requests (don't forget to hit the Submit button!)</h2>
   <h2>For {{person.first_name}}</h2>
-  <h2>For week starting on Monday, {{date}}</h2>
+  <h2>For week starting on Monday, {{monday}}</h2>
 </h2>
   <table>
-    <form method="POST" action="{{ url_for('requests', person_id = person.id) }}">
+    <form method="POST" action="{{ url_for('requests', person_id =
+				person.id, monday = monday) }}">
       <tr>
 	<td>What days will you be in town?</td>
 	<td><p class="fixed-width">
@@ -89,7 +90,7 @@
       <tr>
 	<td>When can you be a sous chef?</td>
 	<td><p class="fixed-width">
-	    <label for="mon_meal">Mon</label>
+	    <label for="mon_sous">Mon</label>
 	    <input type="checkbox" id="mon_sous" name="sous_0" {{"checked" if requests.sous_chef[0]=="1" else ""}} >
 	    <label for="tue_sous">Tue</label>
 	    <input type="checkbox" id="tue_sous" name="sous_1" {{"checked" if requests.sous_chef[1]=="1" else ""}} />

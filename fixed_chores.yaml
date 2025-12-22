@@ -7,7 +7,21 @@ weekly:
     person: Emily
   - chore: Bathrm, 2nd Fl Main
     person: Sasha
+  - chore: Manage Compost
+    person: Emily
+  - chore: Bathrm, Main Fl N
+    person: Ryan
+  - chore: Maintain Facilities
+    person: Manuel
+    credit: 2
+  - chore: Bathrm, Basemnt N
+    person: Manuel
 # add an occasional or seasonal section with the same structure as
 # above to have a fixed assignment for those types of chores, the
 # chore name has to match the name exactly, no extra spaces or
 # different punctuation is allowed
+occasional:
+  - chore: Sweep/Mop Basement Floor
+    person: Manuel
+  - chore: Maintain Water Filtration System
+    person: Ryan

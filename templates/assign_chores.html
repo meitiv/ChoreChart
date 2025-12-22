@@ -1,0 +1,18 @@
+<!doctype html>
+<html>
+<head>
+  <title>Current and Past Chore Assignments</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <h2><a href="/">Homepage</a></h2>
+  <h2>Click on the date below to construct the chore chart for the week
+    starting on that date</h2>
+
+  <ul>
+  {% for monday in mondays %}
+  <li><a href="{{ url_for('make_chore_chart', monday=monday) }}">Week starting on {{monday}}</a></li>
+  {% endfor %}
+  </ul>
+</body>
+</html>

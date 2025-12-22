@@ -35,8 +35,13 @@
       </form>
       <td>
 	{% if person.active %}
-	<form method="GET" action="{{ url_for('requests', person_id = person.id) }}">
-	  <button type="sumbit">Edit Weekly Chore Requests</button>
+	<form action="{{ url_for('requests', person_id = person.id,
+		      monday = this_monday) }}", method="GET">
+	  <button type="sumbit">Chore Requests for {{this_monday}}</button>
+	</form>
+	<form action="{{ url_for('requests', person_id = person.id,
+		      monday = next_monday) }}", method="GET">
+	  <button type="sumbit">Chore Requests for {{next_monday}}</button>
 	</form>
 	{% endif %}
       </td>
