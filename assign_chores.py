@@ -414,7 +414,6 @@ def assign_chores(monday: date):
         if monday > task.end_date.date() or monday < task.start_date.date():
             print('Skipping seasonal', task.task, ': out of season')
             continue
-        print('Assigning seasonal:', task.task)
         intown_avail = merge_prefs(people, intown, preferences, task.task)
         intown_avail['enough_hours'] = people.chore_hours >= task.duration_hours
         intown_avail = intown_avail.query(
@@ -424,6 +423,7 @@ def assign_chores(monday: date):
             print("Not enough hours for seasonal task: " + task.task)
             continue
         person_id = int(intown_avail.iloc[0].name)
+        print('Assigning seasonal:', task.task, 'to', person_id)
         seasonal_chores[person_id].append(int(task.id))
         people.loc[person_id, 'chore_hours'] -= task.duration_hours
 
@@ -443,7 +443,6 @@ def assign_chores(monday: date):
     occasional_chores = defaultdict(list)
 
     for _, task in occasional.sort_values('urgency', ascending = False).iterrows():
-        print('Assigning occasional:', task.task)
         # check if this task has a fixed person assignment
         done = False
         if 'occasional' in fixed_chores_config:
@@ -453,6 +452,9 @@ def assign_chores(monday: date):
                 occasional_chores, occasional, people, done = assign_chore_to_person(
                     people, asnmgt, occasional, occasional_chores
                 )
+                if done:
+                    print('Assigning occasional:', task.task, 'to', asnmgt['person'])
+                    
         if not done:
             intown_avail = merge_prefs(people, intown, preferences, task.task)
             intown_avail['enough_hours'] = people.chore_hours >= task.duration_hours
@@ -463,11 +465,12 @@ def assign_chores(monday: date):
                 print("Not enough hours for occasional task: " + task.task)
                 continue
             person_id = int(intown_avail.iloc[0].name)
+            print('Assigning occasional:', task.task, 'to', person_id)
             occasional_chores[person_id].append(int(task.id))
             people.loc[person_id, 'chore_hours'] -= task.duration_hours
 
     # create the assignments dataframe with week_start_date,person_id,task_type,chore_id columns
-    print(weekly_chores)
+    print(occasional_chores)
     rows = append_chore_rows(weekly_chores, 'weekly', monday, [])
     rows = append_chore_rows(seasonal_chores, 'seasonal', monday, rows)
     rows = append_chore_rows(occasional_chores, 'occasional', monday, rows)

@@ -7,7 +7,7 @@
 <body>
   <h2><a href="/">Homepage</a></h2>
   <h2><a href="/tasks">Chores</a></h2>
-  <h2>Members of the household</h2>
+  <h2>Active members of the household</h2>
   <table>
     <tr>
       <th>Name</th>
@@ -15,7 +15,7 @@
       <th>Load (0-1)</th>
       <th>Active</th>
     </tr>
-    {% for person in people.itertuples() %}
+    {% for person in people.query('active == 1').itertuples() %}
     <tr>
       <td>{{person.first_name}}</td>
       <form method="POST" action="{{ url_for('update_person') }}">
@@ -45,6 +45,36 @@
 	</form>
 	{% endif %}
       </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <h3>Inactive members</h3>
+  <table>
+    <tr>
+      <th>Name</th>
+      <th>Parent</th>
+      <th>Load (0-1)</th>
+      <th>Active</th>
+    </tr>
+    {% for person in people.query('active == 0').itertuples() %}
+    <tr>
+      <td>{{person.first_name}}</td>
+      <form method="POST" action="{{ url_for('update_person') }}">
+	<input type="hidden" name="id" value="{{ person.id }}"></input> 
+	<td>
+	  <input type="checkbox" name="parent" {{"checked" if person.parent else ""}}/>
+	</td>
+	<td>
+	  <input type="text" name="frac" size="4" value="{{ person.load_fraction }}"/>
+	</td>
+	<td>
+	  <input type="checkbox" name="active" {{"checked" if person.active else ""}}/>
+	</td>
+	<td>
+	  <button type="sumbit">Update</button>
+	</td>
+      </form>
     </tr>
     {% endfor %}
   </table>
