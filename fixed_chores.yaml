@@ -16,6 +16,10 @@ weekly:
     credit: 2
   - chore: Bathrm, Basemnt N
     person: Manuel
+  - chore: Refill Empty Food Containers
+    person: Karen
+  - chore: Shopping
+    person: Karen
 # add an occasional or seasonal section with the same structure as
 # above to have a fixed assignment for those types of chores, the
 # chore name has to match the name exactly, no extra spaces or
