@@ -1,7 +1,7 @@
 parent_credit_hours = 1
 target_weekly_hours = 42
 max_weekly_person_hours = 5.25
-sleep_sec = 5
+sleep_sec = 2
 service_file = 'secret/maitrichorechart-339d26170a7c.json'
 border_thickness = 'SOLID_MEDIUM'
 gsheet_key = '1hKq59QTjSGwQ_KJCQYrmaIxy9SgYx_-8ehbzG0gWHHg'

@@ -29,9 +29,8 @@ def get_weekdays(request: int) -> List[int]:
     return [match.span()[0] for match in
             re.finditer('1', np.binary_repr(request, 7))]
 
-def get_table(con, table, parse_dates = None):
-    return pd.read_sql(con=con, sql=f"SELECT * FROM {table}",
-                       parse_dates=parse_dates)
+def get_table(con, table):
+    return pd.read_sql(con=con, sql=f"SELECT * FROM {table}")
 
 def get_people_and_days(values):
     # returns a pd.Series with person_id as index and days lists as
@@ -141,7 +140,8 @@ def assign_chores(monday: date):
         weekly = get_table(con, "weekly_tasks")
         occasional = get_table(con, "occasional_tasks")
         seasonal = get_table(con, "seasonal_tasks")
-        year = monday.year 
+        year = monday.year
+        prev_monday = monday + timedelta(days = -7)
         seasonal['start_date'] = pd.to_datetime(seasonal.start_date + f"/{year}")
         seasonal['end_date'] = pd.to_datetime(seasonal.end_date + f"/{year}")
         seasonal['end_date'] = seasonal.apply(
@@ -150,12 +150,11 @@ def assign_chores(monday: date):
             axis = 1
         )
         # get last available leftover hours
-        hours = pd.read_sql(con = con, sql = f"SELECT * FROM hours")
-        hours = hours[hours.week_start_date != str(monday)]
-        deficit = hours.groupby('person_id').apply(
-            lambda df: df.sort_values('week_start_date').iloc[-1].leftover_hours,
-            include_groups = False
+        hours = pd.read_sql(
+            con = con,
+            sql = f"SELECT * FROM hours where week_start_date = '{prev_monday}'"
         )
+        deficit = hours.set_index('person_id').leftover_hours
 
     # read the fixed chore assignments
     fixed_chores_config = yaml.safe_load(open('fixed_chores.yaml', 'r'))
@@ -394,13 +393,13 @@ def assign_chores(monday: date):
     rows = append_timed_rows(empty_dishes_am, dishes_am_task.id, monday, rows)
     rows = append_timed_rows(empty_dishes_pm, dishes_pm_task.id, monday, rows)
     assignments_timed = pd.DataFrame(rows)
-    print(assignments_timed)
     
     # add the urgency column to the seasonal task definitions
     date_last_performed = pd.read_sql(
         con=con,
-        sql="""SELECT task_id as id, MAX(week_start_date) as date_last_performed
-        FROM assignments WHERE task_type = 'seasonal' GROUP BY task_id"""
+        sql=f"""SELECT task_id as id, MAX(week_start_date) as date_last_performed
+        FROM assignments WHERE task_type = 'seasonal' and week_start_date < '{monday}'
+        GROUP BY task_id"""
     )
     seasonal = seasonal.merge(
         date_last_performed, on = 'id', how = 'left'
@@ -430,19 +429,24 @@ def assign_chores(monday: date):
     # add the urgency column to the occasional task definitions
     date_last_performed = pd.read_sql(
         con=con,
-        sql="""SELECT task_id as id, MAX(week_start_date) as date_last_performed
-        FROM assignments WHERE task_type = 'occasional' GROUP BY task_id"""
+        sql=f"""SELECT task_id as id, MAX(week_start_date) as date_last_performed
+        FROM assignments WHERE task_type = 'occasional' and week_start_date < '{monday}'
+        GROUP BY task_id"""
     )
     occasional = occasional.merge(
         date_last_performed, on = 'id', how = 'left'
     ).fillna(monday - timedelta(days = 365))
-    occasional['urgency'] = (pd.to_datetime(monday) - pd.to_datetime(occasional.date_last_performed)).dt.days/7 - occasional.frequency_weeks
+    occasional['urgency'] = (
+        (pd.to_datetime(monday) - pd.to_datetime(occasional.date_last_performed)).dt.days/7 - 
+        occasional.frequency_weeks
+    )
     # remove tasks with negative urgency (they don't have to be done yet)
     occasional = occasional[occasional.urgency > 0]
     # occasional assignments
     occasional_chores = defaultdict(list)
 
     for _, task in occasional.sort_values('urgency', ascending = False).iterrows():
+        print('Assigning occasional task', task.task)
         # check if this task has a fixed person assignment
         done = False
         if 'occasional' in fixed_chores_config:

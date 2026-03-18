@@ -115,10 +115,41 @@ def tasks():
         seasonal_chores = seasonal_tasks
     )
 
+@app.route("/add_weekly_task", methods=["POST"])
+def add_weekly_task():
+    name = request.form["name"]
+    description = request.form["description"]
+    category = request.form["category"]
+    duration = request.form["duration"]
+    with sqlite3.connect(db) as con:
+        cursor = con.cursor()
+        # get the MAX preference_id
+        cursor.execute("SELECT MAX(id) FROM preferences")
+        pref_id = cursor.fetchone()[0]
+        # get all person ids
+        cursor.execute("SELECT id FROM people WHERE active")
+        for person_id in cursor.fetchall():
+            pref_id += 1
+            cursor.execute(
+                f"""INSERT INTO preferences VALUES
+                ({pref_id}, '{name}', 'weekly', {person_id[0]}, 3)"""
+            )
+        # get the new task id
+        cursor.execute("SELECT MAX(id) FROM weekly_tasks")
+        task_id = 1 + cursor.fetchone()[0]
+        cursor.execute(
+            f"""INSERT INTO weekly_tasks VALUES
+            ({task_id}, '{name}', '{category}',
+            '{description}', {duration})"""
+        )
+        con.commit()
+    return redirect(url_for("tasks"))
+
 @app.route("/add_occasional_task", methods=["POST"])
 def add_occasional_task():
     name = request.form["name"]
     description = request.form["description"]
+    category = request.form["category"]
     duration = request.form["duration"]
     frequency = request.form["frequency"]
     with sqlite3.connect(db) as con:
@@ -139,7 +170,7 @@ def add_occasional_task():
         task_id = 1 + cursor.fetchone()[0]
         cursor.execute(
             f"""INSERT INTO occasional_tasks VALUES
-            ('{task_id}', '{name}', 'Occasional Tasks',
+            ({task_id}, '{name}', '{category}',
             '{description}', {duration}, {frequency})"""
         )
         con.commit()
@@ -170,17 +201,74 @@ def add_seasonal_task():
         cursor.execute("SELECT MAX(id) FROM seasonal_tasks")
         task_id = 1 + cursor.fetchone()[0]
         cursor.execute(
-            f"""INSERT INTO occasional_tasks VALUES
-            ('{task_id}', '{name}', '{category}',
+            f"""INSERT INTO seasonal_tasks VALUES
+            ({task_id}, '{name}', '{category}',
             '{description}', {duration}, {frequency},
             '{start}', '{end}')"""
         )
         con.commit()
     return redirect(url_for("tasks"))
 
+@app.route("/delete_weekly_task", methods=["POST"])
+def delete_weekly_task():
+    task_id = request.form["id"]
+    task_name = request.form["name"]
+    with sqlite3.connect(db) as con:
+        cursor = con.cursor()
+        cursor.execute(
+            f"DELETE FROM weekly_tasks WHERE id = {task_id}"
+        )
+        cursor.execute(
+            f"""DELETE FROM preferences
+            WHERE task_type = "weekly" AND task = "{task_name}" """
+        )
+        con.commit()
+    return redirect(url_for("tasks"))
+
+@app.route("/edit_task", methods=["GET", "POST"])
+def edit_task():
+    if request.method == "POST":
+        print(request.form)
+        tid = request.form["id"]
+        ttype = request.form["type"]
+        name = request.form["name"]
+        desc = request.form.get("description")
+        duration = request.form.get("duration")
+        freq = request.form.get("frequency")
+        category = request.form.get("category")
+        start = request.form.get("season_start")
+        if start is not None: start += "/01"
+        end = request.form.get("season_end")
+        if end is not None: end += "/01"
+        query = f"""update {ttype}_tasks set
+        task = '{name}', category = '{category}',
+        description = '{desc}',
+        duration_hours = '{duration}'"""
+        if ttype == 'occasional':
+            query += f', frequency_weeks = {freq}'
+        if ttype == 'seasonal':
+            query += f""", frequency_days = {freq},
+            start_date = '{start}', end_date = '{end}'"""
+        query += f" where id = {tid}"
+        with sqlite3.connect(db) as con:
+            cursor = con.cursor()
+            cursor.execute(query)
+            con.commit()
+        return redirect(url_for("tasks"))
+    elif request.method == "GET":
+        task_id = request.args.get("id")
+        task_type = request.args.get("type")
+        with sqlite3.connect(db) as con:
+            task = pd.read_sql(
+                con=con, sql=f"select * from {task_type}_tasks where id = {task_id}"
+            ).squeeze()
+            task['task_type'] = task_type
+        return render_template("edit_task.html", task = task)
+        
 @app.route("/delete_occasional_task", methods=["POST"])
 def delete_occasional_task():
     task_id = request.form["id"]
+    task_name = request.form["name"]
     with sqlite3.connect(db) as con:
         cursor = con.cursor()
         cursor.execute(
@@ -188,7 +276,7 @@ def delete_occasional_task():
         )
         cursor.execute(
             f"""DELETE FROM preferences
-            WHERE task_type = "occasional" AND task = {task_name}"""
+            WHERE task_type = "occasional" AND task = "{task_name}" """
         )
         con.commit()
     return redirect(url_for("tasks"))
@@ -196,12 +284,9 @@ def delete_occasional_task():
 @app.route("/delete_seasonal_task", methods=["POST"])
 def delete_seasonal_task():
     task_id = request.form["id"]
+    task_name = request.form["name"]
     with sqlite3.connect(db) as con:
         cursor = con.cursor()
-        cursor.execute(
-            f"SELECT task FROM seasonal_tasks WHERE id = {task_id}"
-        )
-        task_name = cursor.fetchone()[0]
         cursor.execute(
             f"DELETE FROM seasonal_tasks WHERE id = {task_id}"
         )
