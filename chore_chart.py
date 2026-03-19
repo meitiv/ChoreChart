@@ -16,7 +16,7 @@ import yaml
 from collections import defaultdict
 
 app = Flask(__name__)
-app.secret_key = 'compassionatecommunication'
+#app.secret_key = 'compassionatecommunication'
 
 def int_to_bits(number: int):
     return list(np.binary_repr(number, 7))
@@ -228,7 +228,6 @@ def delete_weekly_task():
 @app.route("/edit_task", methods=["GET", "POST"])
 def edit_task():
     if request.method == "POST":
-        print(request.form)
         tid = request.form["id"]
         ttype = request.form["type"]
         name = request.form["name"]
@@ -251,7 +250,17 @@ def edit_task():
             start_date = '{start}', end_date = '{end}'"""
         query += f" where id = {tid}"
         with sqlite3.connect(db) as con:
-            cursor = con.cursor()
+            cursor = con.cursor() 
+            # find whether the name of the task has changed
+            cursor.execute(f'select task from {ttype}_tasks where id = {tid}')
+            old_name = cursor.fetchone()[0]
+            # if the new name is different update the task name in the
+            # preferences table
+            if old_name != name:
+                cursor.execute(f'''
+                update preferences set task = '{name}' where
+                task = '{old_name}' ''')
+            # update the tasks table
             cursor.execute(query)
             con.commit()
         return redirect(url_for("tasks"))
@@ -442,8 +451,7 @@ def make_chore_chart(monday):
     assign_chores.assign_chores(pd.to_datetime(monday).date())
     return redirect(url_for('display_assignment', monday = monday))
 
-@app.route("/assignment/<monday>")
-def display_assignment(monday):
+def assemble_assignments(monday):
     with sqlite3.connect(db) as con:
         people = pd.read_sql(con=con, sql="SELECT * FROM people").set_index('id')
         daily = pd.read_sql(con=con, sql="SELECT * FROM daily_tasks").set_index('id')
@@ -489,6 +497,11 @@ def display_assignment(monday):
                 'weekday': ''
             })
         chores[person_name] = pd.DataFrame(rows)
+    return chores
+
+@app.route("/assignment/<monday>")
+def display_assignment(monday):
+    chores = assemble_assignments(monday)
     return render_template("assignment.html", monday=monday, chores=chores)
 
 @app.route("/make_gsheet/<monday>")

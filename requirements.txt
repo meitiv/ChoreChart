@@ -4,3 +4,6 @@ Werkzeug
 pandas
 pygsheets
 sqlalchemy
+pyyaml
+dotenv
+mailtrap
