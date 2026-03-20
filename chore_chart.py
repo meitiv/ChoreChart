@@ -12,6 +12,7 @@ import assign_chores
 import construct_gsheet
 import multiprocessing
 from construct_gsheet import GsheetConstructor
+from chore_mailer import ChoreMailer
 import yaml
 from collections import defaultdict
 
@@ -432,8 +433,7 @@ def current_assignment():
     with sqlite3.connect(db) as con:
         mondays = pd.read_sql(
             con=con, sql="SELECT DISTINCT week_start_date FROM assignments"
-        ).week_start_date.values
-        mondays.sort()
+        ).week_start_date.sort_values().values
     return render_template("assignments.html",
                            mondays=mondays[::-1])
 
@@ -512,5 +512,15 @@ def make_gsheet(monday):
     flash("Constructing the GSheet")
     return render_template("index.html")
 
+@app.route("/send_chore_emails/<monday>")
+def send_chore_emails(monday):
+    with sqlite3.connect(db) as con:
+        people = pd.read_sql(con = con, sql = 'select * from people')
+    assign = assemble_assignments(monday)
+    mailer = ChoreMailer(people, monday, assign)
+    process = multiprocessing.Process(target = mailer.mail_chores)
+    process.start()
+    return render_template("index.html")
+    
 if __name__ == '__main__':
     app.run(debug = True)

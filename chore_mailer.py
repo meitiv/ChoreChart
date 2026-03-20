@@ -1,19 +1,20 @@
 import pandas as pd
-import mailtrap as mt
-import dotenv
 import os
-    
+from email.message import EmailMessage
+from googleapiclient.discovery import build
+from google.oauth2.credentials import Credentials
+from email.utils import formataddr
+import base64
+
 class ChoreMailer:
-    def __init__(self, people, monday):
-        if not dotenv.load_dotenv():
-            raise ValueError("Could not load .env")
+    def __init__(self, people, monday, assignments):
+        SCOPES = ['https://www.googleapis.com/auth/gmail.send']
         self.sender = '251manorcircle@gmail.com'
-        token = os.environ.get('mailtrap_token')
-        if not token:
-            raise ValueError("Cound not get Mailtrap token")
         self.people = people
         self.monday = monday
-        self.server = mt.MailtrapClient(token)
+        self.assignments = assignments
+        creds = Credentials.from_authorized_user_file('secret/token.json', SCOPES)
+        self.service = build("gmail", "v1", credentials = creds)
 
     def compose_message(self, chores):
         message = '''
@@ -36,7 +37,7 @@ class ChoreMailer:
     <td>{chore.duration_hours}</td>
     <td>{chore.weekday}</td>
   </tr>'''
-        message += '''
+        message += f'''
   <tr>
     <td>Total hours:</td>
     <td>{chores.duration_hours.sum()}</td>
@@ -47,16 +48,17 @@ class ChoreMailer:
         return message
         
     def send_chores_to(self, person, chores):
-        message = mt.Mail(
-            sender = mt.Address(email = '251manorcircle@gmail', name = 'Maitri Chores'),
-            to = [mt.Address(email = person.email, name = f'{person.first_name} {person.last_name}')],
-            subject = f'Your chores for week starting {self.monday}',
-            html = self.compose_message(chores)
-        )
-        return self.server.send(message)
+        message = EmailMessage()
+        message.set_content(f'Dear {person.first_name}!\n')
+        message.add_alternative(self.compose_message(chores), subtype = 'html')
+        message['From'] = formataddr(('Maitri Chore Manager', self.sender))
+        message['To'] = formataddr((person.first_name, person.email))
+        message['Subject'] = f'Your chores for the week starting on {self.monday}'
+        message = {"raw": base64.urlsafe_b64encode(message.as_bytes()).decode()}
+        return self.service.users().messages().send(userId = 'me', body = message).execute()
 
-    def mail_chores(self, assignments: dict):
-        for name, chores in assignments.items():
+    def mail_chores(self):
+        for name, chores in self.assignments.items():
             # find the person
             person = self.people.query(f'first_name == "{name}"')
             if person.empty:
