@@ -485,7 +485,10 @@ def assemble_assignments(monday):
                 'weekday': ts.strftime("%A")
             })
         for _, chore in assign.query(f'person_id == {person_id}').iterrows():
-            task = eval(f'{chore.task_type}.loc[{chore.task_id}]')
+            try:
+                task = eval(f'{chore.task_type}.loc[{chore.task_id}]')
+            except:
+                continue
             # see if there is a custom duration
             if person_name in custom_duration and task.task in custom_duration[person_name]:
                 duration = custom_duration[person_name][task.task]
