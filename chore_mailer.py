@@ -16,7 +16,7 @@ class ChoreMailer:
         creds = Credentials.from_authorized_user_file('secret/token.json', SCOPES)
         self.service = build("gmail", "v1", credentials = creds)
 
-    def compose_message(self, chores):
+    def compose_message(self, person, chores):
         message = '''
 <!doctype html>
 <html>
@@ -24,23 +24,25 @@ class ChoreMailer:
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 </head>
 <body style="font-family: sans-serif;">
+  <h3>Dear {person.first_name}:<h3>
+  <h4>Here are your chores for the week starting on {self.monday}</h4>
   <table style="border-collapse: collapse; border: solid 1px #cccccc;">
   <tr>
-    <th>Chore</th>
-    <th>Hours</th>
-    <th>Day</th>
+    <th style="border: 1px solid black;">Chore</th>
+    <th style="border: 1px solid black;">Hours</th>
+    <th style="border: 1px solid black;">Day</th>
   </tr>'''
         for _, chore in chores.iterrows():
             message += f'''
   <tr>
-    <td>{chore.task.replace(' Lead', '').replace(' Helper', '')}</td>
-    <td>{chore.duration_hours}</td>
-    <td>{chore.weekday}</td>
+    <td style="border: 1px solid black;">{chore.task.replace(' Lead', '').replace(' Helper', '')}</td>
+    <td style="border: 1px solid black;">{chore.duration_hours}</td>
+    <td style="border: 1px solid black;">{chore.weekday}</td>
   </tr>'''
         message += f'''
   <tr>
-    <td>Total hours:</td>
-    <td>{chores.duration_hours.sum()}</td>
+    <td style="border: 1px solid black;">Total hours:</td>
+    <td style="border: 1px solid black;">{chores.duration_hours.sum()}</td>
   </tr>
 </table>
 </body>
@@ -50,7 +52,7 @@ class ChoreMailer:
     def send_chores_to(self, person, chores):
         message = EmailMessage()
         message.set_content(f'Dear {person.first_name}!\n')
-        message.add_alternative(self.compose_message(chores), subtype = 'html')
+        message.add_alternative(self.compose_message(person, chores), subtype = 'html')
         message['From'] = formataddr(('Maitri Chore Manager', self.sender))
         message['To'] = formataddr((person.first_name, person.email))
         message['Subject'] = f'Your chores for the week starting on {self.monday}'
