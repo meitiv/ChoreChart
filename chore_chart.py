@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from flask import Flask, redirect, request, flash, send_from_directory
+from flask import Flask, redirect, request, send_from_directory
 from flask import render_template
 from flask import url_for
 import sqlite3
@@ -512,7 +512,6 @@ def make_gsheet(monday):
     constructor = GsheetConstructor(monday)
     process = multiprocessing.Process(target = constructor.main)
     process.start()
-    flash("Constructing the GSheet")
     return render_template("index.html")
 
 @app.route("/send_chore_emails/<monday>")
