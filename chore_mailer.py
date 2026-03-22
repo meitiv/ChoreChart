@@ -24,7 +24,7 @@ class ChoreMailer:
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 </head>
 <body style="font-family: sans-serif;">
-  <table>
+  <table style="border-collapse: collapse; border: solid 1px #cccccc;">
   <tr>
     <th>Chore</th>
     <th>Hours</th>

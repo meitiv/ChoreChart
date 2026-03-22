@@ -20,13 +20,13 @@
 	<td>{{chore.task}}</td>
 	<td>{{chore.description.replace('\n', '<br>') | safe}}</td>
 	<td>{{'%.2f' % chore.duration_hours}}</td>
-	<td>
-	  <form method="GET" action="{{ url_for('edit_task') }}">
-	    <input type="hidden" name="id" value="{{ chore.id }}"></input>
-	    <input type="hidden" name="type" value="daily"></input>
-	    <button type="sumbit">Edit</button>
-	  </form>
-	</td>
+	<!-- <td> -->
+	<!--   <form method="GET" action="{{ url_for('edit_task') }}"> -->
+	<!--     <input type="hidden" name="id" value="{{ chore.id }}"></input> -->
+	<!--     <input type="hidden" name="type" value="daily"></input> -->
+	<!--     <button type="sumbit">Edit</button> -->
+	<!--   </form> -->
+	<!-- </td> -->
       </tr>
       {% endfor %}
     </table>
