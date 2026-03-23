@@ -17,7 +17,7 @@ class ChoreMailer:
         self.service = build("gmail", "v1", credentials = creds)
 
     def compose_message(self, person, chores):
-        message = '''
+        message = f'''
 <!doctype html>
 <html>
 <head>
@@ -45,6 +45,8 @@ class ChoreMailer:
     <td style="border: 1px solid black;">{chores.duration_hours.sum()}</td>
   </tr>
 </table>
+
+<h4>The chore chart can be found <a href="https://docs.google.com/spreadsheets/d/1hKq59QTjSGwQ_KJCQYrmaIxy9SgYx_-8ehbzG0gWHHg">here</a></h4>
 </body>
 </html>'''
         return message
