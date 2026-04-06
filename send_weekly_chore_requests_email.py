@@ -2,6 +2,7 @@
 from email.message import EmailMessage
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from email.utils import formataddr
 import base64
 from datetime import date, timedelta
@@ -9,6 +10,13 @@ from datetime import date, timedelta
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 sender = '251manorcircle@gmail.com'
 creds = Credentials.from_authorized_user_file('secret/token.json', SCOPES)
+if not creds or not creds.valid:
+    if creds and creds.expired and creds.refresh_token:
+        # Automatic refresh using the refresh_token
+        creds.refresh(Request())
+    else:
+        raise ValueError('Need to manually reauthenticate')
+    
 service = build("gmail", "v1", credentials = creds)
 monday = date.today() + timedelta(days = 7 - date.today().weekday())
 saturday = monday - timedelta(days = 2)

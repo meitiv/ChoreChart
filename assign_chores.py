@@ -325,11 +325,9 @@ def assign_chores(monday: date):
     print('Assigning Main Floor Bathroom to', people.loc[person_id, 'first_name'])
     people.loc[person_id, 'chore_hours'] -= task.duration_hours
     weekly = weekly[~(weekly.index == task.name)]
-    print(weekly_chores)
 
     # the rest of the tasks are assigned by availability and
     # preference
-    print(weekly)
     for _, task in weekly.iterrows():
         print('Assigning weekly:', task.task)
         intown_avail = merge_prefs(people, intown, preferences, task.task)
@@ -343,7 +341,6 @@ def assign_chores(monday: date):
         # custom logic for "Manage Trash & Recycling": the person has
         # to be in town 5 or more days including Wednesday and Thursday
         if task.task == 'Manage Trash & Recycling':
-            print(intown_avail)
             match = False
             for person_id, row in intown_avail.iterrows():
                 if 2 in row.day and 3 in row.day and row.num_days > 4:
@@ -474,11 +471,20 @@ def assign_chores(monday: date):
             people.loc[person_id, 'chore_hours'] -= task.duration_hours
 
     # create the assignments dataframe with week_start_date,person_id,task_type,chore_id columns
-    print(occasional_chores)
     rows = append_chore_rows(weekly_chores, 'weekly', monday, [])
     rows = append_chore_rows(seasonal_chores, 'seasonal', monday, rows)
     rows = append_chore_rows(occasional_chores, 'occasional', monday, rows)
     assignments = pd.DataFrame(rows)
+
+    # check that the meal cleanup and night cleanup and dishes are all
+    # covered
+    num_meals = (assignments_timed.task_id == 0).sum()
+    num_nights = 7 - num_meals
+    num_cleanup_total = num_meals*2 + num_meals
+    if not assignments_timed.task_id.isin((2,3,4)).sum() == num_cleanup_total:
+        message = 'Not enough labor for meal/night cleanup'
+        return False, message
+    
 
     # update the database: assignments and people (deficit column)
     with sqlite3.connect(db) as con:
@@ -497,4 +503,4 @@ def assign_chores(monday: date):
         hours_this_week.to_sql(con=con, name="hours", index=False, if_exists="append")
 
     # return success
-    return True
+    return True, ''

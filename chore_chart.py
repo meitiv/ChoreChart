@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 
 from flask import Flask, redirect, request, send_from_directory
-from flask import render_template
-from flask import url_for
+from flask import render_template, flash, url_for
 import sqlite3
 import pandas as pd
 import numpy as np
@@ -17,7 +16,7 @@ import yaml
 from collections import defaultdict
 
 app = Flask(__name__)
-#app.secret_key = 'compassionatecommunication'
+app.secret_key = 'compassionatecommunication'
 
 def int_to_bits(number: int):
     return list(np.binary_repr(number, 7))
@@ -448,8 +447,12 @@ def chores():
 
 @app.route("/assign-chores/<monday>")
 def make_chore_chart(monday):
-    assign_chores.assign_chores(pd.to_datetime(monday).date())
-    return redirect(url_for('display_assignment', monday = monday))
+    success, message = assign_chores.assign_chores(pd.to_datetime(monday).date())
+    if not success:
+        flash(message, 'confirm')
+        return redirect(url_for('people'))
+    else:
+        return redirect(url_for('display_assignment', monday = monday))
 
 def assemble_assignments(monday):
     with sqlite3.connect(db) as con:
