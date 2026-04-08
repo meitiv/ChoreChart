@@ -62,10 +62,10 @@ def update_person():
 
 @app.route("/add_person", methods=["POST"])
 def add_person():
-    first_name = request.form["first_name"]
-    last_name = request.form["last_name"]
-    frac = float(request.form["frac"])
-    email = request.form["email"]
+    first_name = request.form["first_name"].strip()
+    last_name = request.form["last_name"].strip()
+    frac = float(request.form["frac"].strip())
+    email = request.form["email"].strip()
     parent = 1 if "parent" in request.form else 0
     with sqlite3.connect(db) as con:
         cursor = con.cursor()
