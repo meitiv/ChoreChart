@@ -3,6 +3,7 @@ import os
 from email.message import EmailMessage
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from email.utils import formataddr
 import base64
 
@@ -14,6 +15,12 @@ class ChoreMailer:
         self.monday = monday
         self.assignments = assignments
         creds = Credentials.from_authorized_user_file('secret/token.json', SCOPES)
+        if not creds or not creds.valid:
+            if creds and creds.expired and creds.refresh_token:
+                # Automatic refresh using the refresh_token
+                creds.refresh(Request())
+            else:
+                raise ValueError('Need to manually reauthenticate')
         self.service = build("gmail", "v1", credentials = creds)
 
     def compose_message(self, person, chores):
