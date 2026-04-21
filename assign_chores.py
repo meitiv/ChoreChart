@@ -105,7 +105,10 @@ def get_hours_worked(monday, assignments, assignments_timed,
 
 def calc_target_hours(people, days_in_town, deficit):
     fraction = (people.load_fraction*days_in_town/7).fillna(0)
+    print('Fraction:', fraction)
     per_person_target = target_weekly_hours/fraction.sum()
+    # don't add deficit if fraction is zero
+    deficit.loc[fraction[fraction == 0].index] = 0
     target_hours = (per_person_target*fraction).add(deficit, fill_value = 0)
     target_hours = target_hours.apply(
         lambda h: min(h, max_weekly_person_hours)
@@ -479,12 +482,13 @@ def assign_chores(monday: date):
     # check that the meal cleanup and night cleanup and dishes are all
     # covered
     num_meals = (assignments_timed.task_id == 0).sum()
-    num_nights = 7 - num_meals
-    num_cleanup_total = num_meals*2 + num_meals
-    if not assignments_timed.task_id.isin((2,3,4)).sum() == num_cleanup_total:
+    num_cleanup_total = 7 + num_meals
+    num_slots = assignments_timed.task_id.isin((2,3,4)).sum()
+    if num_slots != num_cleanup_total:
         message = 'Not enough labor for meal/night cleanup'
+        print(message)
+        print(num_cleanup_total, num_slots)
         return False, message
-    
 
     # update the database: assignments and people (deficit column)
     with sqlite3.connect(db) as con:
