@@ -147,7 +147,9 @@ class GsheetConstructor:
     def fill_chore_info(self, chore):
         self.sheet.update_value(f'D{self.current_row}', chore.duration_hours)
         self.sheet.update_value(f'E{self.current_row}', chore.first_name)
-        self.sheet.update_value(f'F{self.current_row}', '☐')
+        check_addr = f'F{self.current_row}'
+        #self.sheet.update_value(check_addr, '☐')
+        self.sheet.set_data_validation(start = check_addr, end = check_addr, condition_type = 'CHECKBOX')
         self.current_row += 1
 
     def draw_separators(self):
@@ -226,6 +228,12 @@ class GsheetConstructor:
             if c.value:
                 cell.text_format['fontSize'] = size
 
+    def delete_unused_cells(self):
+        self.sheet.delete_columns(7, 20)
+        num_rows = 100 - self.current_row
+        row_start = self.current_row + 1
+        self.sheet.delete_rows(row_start, num_rows)
+
     def main(self):
         self.load_data()
         self.create_sheet()
@@ -242,6 +250,7 @@ class GsheetConstructor:
         self.add_category_chores("Other Common Areas")
         self.add_category_chores("Occasional Tasks")
         self.add_category_chores("Support Roles")
+        self.delete_unused_cells()
         self.draw_separators()
         self.adjust_column_widths()
         #self.change_font_size()
