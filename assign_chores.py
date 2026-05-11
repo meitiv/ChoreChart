@@ -44,18 +44,18 @@ def get_people_and_days(values):
 
 def merge_prefs(people, avail_df, pref_df, task_name):
     return avail_df.merge(
-        pref_df[pref_df.task == task_name][["person_id", "preference"]],
+        pref_df[pref_df.task == task_name][['person_id', 'preference']],
         left_index = True,
-        right_on = "person_id",
-        how = "left"
+        right_on = 'person_id',
+        how = 'left'
     ).merge(
-        people[["chore_hours"]],
+        people[['chore_hours']],
         right_index = True,
-        left_on = "person_id",
-        how = "left"
+        left_on = 'person_id',
+        how = 'left'
     ).sort_values(
-        ["preference", "chore_hours"], ascending = False
-    ).set_index("person_id")
+        ['chore_hours', 'preference'], ascending = False
+    ).set_index('person_id')
 
 def append_timed_rows(assign_dict, task_id, monday, rows):
     for person_id, days in assign_dict.items():
@@ -104,15 +104,14 @@ def get_hours_worked(monday, assignments, assignments_timed,
     return pd.concat((hours, hours_timed), axis = 1).fillna(0).sum(axis = 1)
 
 def calc_target_hours(people, days_in_town, deficit):
-    fraction = (people.load_fraction*days_in_town/7).fillna(0)
-    print('Fraction:', fraction)
-    per_person_target = target_weekly_hours/fraction.sum()
-    # don't add deficit if fraction is zero
-    deficit.loc[fraction[fraction == 0].index] = 0
-    target_hours = (per_person_target*fraction).add(deficit, fill_value = 0)
-    target_hours = target_hours.apply(
-        lambda h: min(h, max_weekly_person_hours)
-    )
+    # compute the maximum number of hours each person can work
+    max_hours = max_weekly_person_hours*(people.load_fraction*days_in_town/7).fillna(0)
+    # if a person is not in town, igonre them
+    deficit.loc[max_hours[max_hours == 0].index] = 0
+    # compute factors
+    factors = len(max_hours)*(max_hours + deficit)/(max_hours + deficit).sum()
+    target_hours = max_hours*factors
+    target_hours = max_weekly_person_hours*target_hours/target_hours.max()
     target_hours = target_hours - people.parent*parent_credit_hours
     target_hours = target_hours[target_hours > 0]
     return target_hours
@@ -152,10 +151,14 @@ def assign_chores(monday: date):
             else row.end_date + timedelta(days = 365),
             axis = 1
         )
-        # get last available leftover hours
+        # get total leftover hours
         hours = pd.read_sql(
-            con = con,
-            sql = f"SELECT * FROM hours where week_start_date = '{prev_monday}'"
+            con = con, sql = f"""
+            SELECT select h.person_id, sum(leftover_hours) as leftover_hours
+            from hours as h join people as p on h.person_id = p.id
+            where p.active and week_start_date = '{prev_monday}'
+            group by person_id
+            """
         )
         deficit = hours.set_index('person_id').leftover_hours
 
@@ -405,7 +408,9 @@ def assign_chores(monday: date):
         date_last_performed, on = 'id', how = 'left'
     ).fillna(monday - timedelta(days = 365))
     # remove tasks with negative urgency (they don't have to be done yet)
-    seasonal['urgency'] = (pd.to_datetime(monday) - pd.to_datetime(seasonal.date_last_performed)).dt.days - seasonal.frequency_days
+    seasonal['urgency'] = (
+        pd.to_datetime(monday) - pd.to_datetime(seasonal.date_last_performed)
+    ).dt.days - seasonal.frequency_days
     seasonal = seasonal[seasonal.urgency > 0]
     # seasonal assignments
     seasonal_chores = defaultdict(list)
