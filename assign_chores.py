@@ -154,7 +154,7 @@ def assign_chores(monday: date):
         # get total leftover hours
         hours = pd.read_sql(
             con = con, sql = f"""
-            SELECT select h.person_id, sum(leftover_hours) as leftover_hours
+            select h.person_id, sum(leftover_hours) as leftover_hours
             from hours as h join people as p on h.person_id = p.id
             where p.active and week_start_date = '{prev_monday}'
             group by person_id
